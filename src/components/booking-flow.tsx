@@ -22,7 +22,9 @@ const initialState: BookingActionState = { status: "idle" };
 export function BookingFlow({ project, action }: BookingFlowProps) {
   const firstAvailableIndex = Math.max(
     0,
-    project.days.findIndex((day) => day.slots.length > 0),
+    project.days.findIndex((day) =>
+      day.slots.some((slot) => slot.availableHostCount > 0),
+    ),
   );
   const [windowStart, setWindowStart] = useState(firstAvailableIndex);
   const [selected, setSelected] = useState<SelectedSlot | null>(null);
@@ -102,16 +104,24 @@ export function BookingFlow({ project, action }: BookingFlowProps) {
               {visibleDays.map((day) => (
                 <div key={day.dateKey} className="min-h-[520px] space-y-1 border-l border-slate-200">
                   {day.slots.length > 0 ? (
-                    day.slots.map((slot) => (
-                      <button
-                        key={slot.startIso}
-                        className="block min-h-14 w-full rounded-md bg-teal-600 px-2 py-2 text-left text-sm font-medium text-white transition hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-400"
-                        onClick={() => setSelected({ day, slot })}
-                        type="button"
-                      >
-                        {slot.label}
-                      </button>
-                    ))
+                    day.slots.map((slot) =>
+                      slot.availableHostCount > 0 ? (
+                        <button
+                          key={slot.startIso}
+                          className="block min-h-14 w-full rounded-md bg-teal-600 px-2 py-2 text-left text-sm font-medium text-white transition hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                          onClick={() => setSelected({ day, slot })}
+                          type="button"
+                        >
+                          {slot.label}
+                        </button>
+                      ) : (
+                        <div
+                          key={slot.startIso}
+                          aria-hidden="true"
+                          className="min-h-14 rounded-md border border-transparent"
+                        />
+                      ),
+                    )
                   ) : (
                     <div className="rounded-md border border-dashed border-slate-200 px-2 py-6 text-center text-xs text-slate-400">
                       空きなし
@@ -129,16 +139,24 @@ export function BookingFlow({ project, action }: BookingFlowProps) {
                   </p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     {day.slots.length > 0 ? (
-                      day.slots.map((slot) => (
-                        <button
-                          key={slot.startIso}
-                          className="rounded-lg bg-teal-600 px-3 py-2.5 text-sm font-medium text-white"
-                          onClick={() => setSelected({ day, slot })}
-                          type="button"
-                        >
-                          {slot.label}
-                        </button>
-                      ))
+                      day.slots.map((slot) =>
+                        slot.availableHostCount > 0 ? (
+                          <button
+                            key={slot.startIso}
+                            className="min-h-10 rounded-lg bg-teal-600 px-3 py-2.5 text-sm font-medium text-white"
+                            onClick={() => setSelected({ day, slot })}
+                            type="button"
+                          >
+                            {slot.label}
+                          </button>
+                        ) : (
+                          <div
+                            key={slot.startIso}
+                            aria-hidden="true"
+                            className="min-h-10 rounded-lg border border-transparent"
+                          />
+                        ),
+                      )
                     ) : (
                       <p className="col-span-2 text-sm text-slate-400">空き枠がありません</p>
                     )}

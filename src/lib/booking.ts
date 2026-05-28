@@ -278,30 +278,22 @@ export async function getBookingPageProject(
         const start = createDateFromJst(parts, minute);
         const end = createDateFromJst(parts, minute + project.duration_minutes);
 
-        if (start < earliestStart) {
-          continue;
-        }
-
-        const availableHostCount = hosts.filter(
-          (host) => {
-            const googleBusy = googleBusyByHost.get(host.user_id) ?? [];
-            return (
-              !bookings.some(
-              (booking) => booking.host_id === host.user_id && overlaps(start, end, booking),
-              ) && !googleBusy.some((busy) => overlaps(start, end, busy))
-            );
-          },
-        ).length;
-
-        if (availableHostCount === 0) {
-          continue;
-        }
-
         entries.push({
           startIso: start.toISOString(),
           endIso: end.toISOString(),
           label: `${formatMinute(minute)} - ${formatMinute(minute + project.duration_minutes)}`,
-          availableHostCount,
+          availableHostCount:
+            start < earliestStart
+              ? 0
+              : hosts.filter((host) => {
+                  const googleBusy = googleBusyByHost.get(host.user_id) ?? [];
+                  return (
+                    !bookings.some(
+                      (booking) =>
+                        booking.host_id === host.user_id && overlaps(start, end, booking),
+                    ) && !googleBusy.some((busy) => overlaps(start, end, busy))
+                  );
+                }).length,
         });
       }
       return entries;
