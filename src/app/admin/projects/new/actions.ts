@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { transaction } from "@/lib/db";
@@ -74,23 +75,27 @@ export async function createProject(formData: FormData) {
   const bufferMinutes = getInteger(formData, "bufferMinutes", 10);
 
   await transaction(async (client) => {
+    const projectId = randomUUID();
     const projectResult = await client.query<{ id: string }>(
       `
         insert into projects (
-          name, slug, description, assignment_mode, duration_minutes,
+          id, name, slug, description, assignment_mode, duration_minutes,
           booking_window_days, minimum_lead_hours, change_cutoff_hours,
           buffer_before_minutes, buffer_after_minutes, per_host_daily_limit,
           project_daily_limit, reminder_one_hour_enabled, is_active, main_color
+          , updated_at
         )
         values (
-          $1, $2, $3, $4, $5,
+          $1, $2, $3, $4, $5, $6,
           30, 24, 24,
-          $6, $6, 6,
-          18, true, true, $7
+          $7, $7, 6,
+          18, true, true, $8,
+          CURRENT_TIMESTAMP
         )
         returning id
       `,
       [
+        projectId,
         name,
         slug,
         getText(formData, "description") || null,
@@ -100,15 +105,15 @@ export async function createProject(formData: FormData) {
         getText(formData, "mainColor") || "#2257d6",
       ],
     );
-    const projectId = projectResult.rows[0].id;
+    const savedProjectId = projectResult.rows[0].id;
 
     for (const [index, userId] of hostIds.entries()) {
       await client.query(
         `
-          insert into project_hosts (project_id, user_id, priority, is_active)
-          values ($1, $2, $3, true)
+          insert into project_hosts (id, project_id, user_id, priority, is_active)
+          values ($1, $2, $3, $4, true)
         `,
-        [projectId, userId, index + 1],
+        [randomUUID(), savedProjectId, userId, index + 1],
       );
     }
 
@@ -116,31 +121,32 @@ export async function createProject(formData: FormData) {
       await client.query(
         `
           insert into project_availabilities (
-            project_id, weekday, start_minute, end_minute
+            id, project_id, weekday, start_minute, end_minute
           )
-          values ($1, $2, $3, $4)
+          values ($1, $2, $3, $4, $5)
         `,
-        [projectId, weekday, startMinute, endMinute],
+        [randomUUID(), savedProjectId, weekday, startMinute, endMinute],
       );
     }
 
     const fields = [
-      { key: "name", label: "Name", type: "text", isRequired: true },
-      { key: "email", label: "Email", type: "email", isRequired: true },
-      { key: "phone", label: "Phone", type: "tel", isRequired: false },
-      { key: "note", label: "Message", type: "textarea", isRequired: false },
+      { key: "name", label: "氏名", type: "text", isRequired: true },
+      { key: "email", label: "メールアドレス", type: "email", isRequired: true },
+      { key: "phone", label: "電話番号", type: "tel", isRequired: false },
+      { key: "note", label: "ご相談内容", type: "textarea", isRequired: false },
     ];
 
     for (const [index, field] of fields.entries()) {
       await client.query(
         `
           insert into form_fields (
-            project_id, key, label, type, is_required, sort_order
+            id, project_id, key, label, type, is_required, sort_order
           )
-          values ($1, $2, $3, $4, $5, $6)
+          values ($1, $2, $3, $4, $5, $6, $7)
         `,
         [
-          projectId,
+          randomUUID(),
+          savedProjectId,
           field.key,
           field.label,
           field.type,

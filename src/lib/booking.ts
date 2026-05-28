@@ -389,18 +389,21 @@ export async function createBooking(params: {
     }>(
       `
         insert into bookings (
-          project_id, host_id, status, starts_at, ends_at,
+          id, project_id, host_id, status, starts_at, ends_at,
           blocked_starts_at, blocked_ends_at, timezone,
           guest_name_encrypted, guest_email_encrypted, guest_email_lookup_hash,
-          management_token_hash, idempotency_key, calendar_sync_status
+          management_token_hash, idempotency_key, calendar_sync_status,
+          updated_at
         )
         values (
-          $1, $2, 'confirmed', $3, $4, $5, $6, $7,
-          $8, $9, $10, $11, $12, 'not_created'
+          $1, $2, $3, 'confirmed', $4, $5, $6, $7, $8,
+          $9, $10, $11, $12, $13, 'not_created',
+          CURRENT_TIMESTAMP
         )
         returning id, starts_at, ends_at
       `,
       [
+        randomUUID(),
         project.id,
         host.user_id,
         start,
@@ -440,11 +443,11 @@ export async function createBooking(params: {
       await client.query(
         `
           insert into booking_answers (
-            booking_id, form_field_id, field_key, field_label, value_encrypted
+            id, booking_id, form_field_id, field_key, field_label, value_encrypted
           )
-          values ($1, $2, $3, $4, $5)
+          values ($1, $2, $3, $4, $5, $6)
         `,
-        [booking.id, field.id, field.key, label, `plain:${value}`],
+        [randomUUID(), booking.id, field.id, field.key, label, `plain:${value}`],
       );
     }
 
