@@ -108,6 +108,12 @@ export function AdminProjectList({ projects }: AdminProjectListProps) {
               <div className="flex flex-col gap-2 border-t border-slate-100 bg-slate-50 px-5 py-4 text-sm font-semibold text-teal-700 sm:flex-row sm:justify-end">
                 <Link
                   className="rounded-lg px-3 py-2 text-center hover:bg-white"
+                  href={`/admin/projects/${project.slug}`}
+                >
+                  設定を編集
+                </Link>
+                <Link
+                  className="rounded-lg px-3 py-2 text-center hover:bg-white"
                   href={`/book/${project.slug}`}
                 >
                   ページを表示
