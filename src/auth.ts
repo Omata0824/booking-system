@@ -1,3 +1,4 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
@@ -17,6 +18,29 @@ declare module "@auth/core/jwt" {
   }
 }
 
+type AuthEnv = {
+  AUTH_SECRET?: string;
+  AUTH_GOOGLE_ID?: string;
+  AUTH_GOOGLE_SECRET?: string;
+};
+
+async function getAuthEnv(): Promise<AuthEnv> {
+  if (
+    process.env.AUTH_SECRET &&
+    process.env.AUTH_GOOGLE_ID &&
+    process.env.AUTH_GOOGLE_SECRET
+  ) {
+    return process.env;
+  }
+
+  try {
+    const context = await getCloudflareContext({ async: true });
+    return context.env as AuthEnv;
+  } catch {
+    return process.env;
+  }
+}
+
 async function refreshAccessToken(token: {
   refreshToken?: string;
   [key: string]: unknown;
@@ -26,12 +50,13 @@ async function refreshAccessToken(token: {
   }
 
   try {
+    const env = await getAuthEnv();
     const response = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: process.env.AUTH_GOOGLE_ID ?? "",
-        client_secret: process.env.AUTH_GOOGLE_SECRET ?? "",
+        client_id: env.AUTH_GOOGLE_ID ?? "",
+        client_secret: env.AUTH_GOOGLE_SECRET ?? "",
         grant_type: "refresh_token",
         refresh_token: token.refreshToken,
       }),
@@ -58,41 +83,48 @@ async function refreshAccessToken(token: {
   }
 }
 
-export const { auth, handlers, signIn, signOut } = NextAuth({
-  trustHost: true,
-  providers: [
-    Google({
-      authorization: {
-        params: {
-          access_type: "offline",
-          prompt: "consent",
-          scope:
-            "openid email profile https://www.googleapis.com/auth/calendar",
+export const { auth, handlers, signIn, signOut } = NextAuth(async () => {
+  const env = await getAuthEnv();
+
+  return {
+    secret: env.AUTH_SECRET,
+    trustHost: true,
+    providers: [
+      Google({
+        clientId: env.AUTH_GOOGLE_ID,
+        clientSecret: env.AUTH_GOOGLE_SECRET,
+        authorization: {
+          params: {
+            access_type: "offline",
+            prompt: "consent",
+            scope:
+              "openid email profile https://www.googleapis.com/auth/calendar",
+          },
         },
+      }),
+    ],
+    callbacks: {
+      async jwt({ token, account }) {
+        if (account) {
+          return {
+            ...token,
+            accessToken: account.access_token,
+            refreshToken: account.refresh_token,
+            expiresAt: account.expires_at,
+          };
+        }
+
+        if (token.expiresAt && Date.now() < (token.expiresAt - 60) * 1000) {
+          return token;
+        }
+
+        return refreshAccessToken(token);
       },
-    }),
-  ],
-  callbacks: {
-    async jwt({ token, account }) {
-      if (account) {
-        return {
-          ...token,
-          accessToken: account.access_token,
-          refreshToken: account.refresh_token,
-          expiresAt: account.expires_at,
-        };
-      }
-
-      if (token.expiresAt && Date.now() < (token.expiresAt - 60) * 1000) {
-        return token;
-      }
-
-      return refreshAccessToken(token);
+      async session({ session, token }) {
+        session.accessToken = token.accessToken;
+        session.error = token.error;
+        return session;
+      },
     },
-    async session({ session, token }) {
-      session.accessToken = token.accessToken;
-      session.error = token.error;
-      return session;
-    },
-  },
+  };
 });
