@@ -1,0 +1,273 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN  @map("admin")
+  MEMBER @map("member")
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  INVITED  @map("invited")
+  ACTIVE   @map("active")
+  DISABLED @map("disabled")
+
+  @@map("user_status")
+}
+
+enum AssignmentMode {
+  ROUND_ROBIN @map("round_robin")
+  PRIORITY    @map("priority")
+  RANDOM      @map("random")
+
+  @@map("assignment_mode")
+}
+
+enum FormFieldType {
+  TEXT     @map("text")
+  TEXTAREA @map("textarea")
+  EMAIL    @map("email")
+  TEL      @map("tel")
+  CHECKBOX @map("checkbox")
+  RADIO    @map("radio")
+  SELECT   @map("select")
+
+  @@map("form_field_type")
+}
+
+enum BookingStatus {
+  HELD        @map("held")
+  CONFIRMED   @map("confirmed")
+  CANCELLED   @map("cancelled")
+  RESCHEDULED @map("rescheduled")
+  COMPLETED   @map("completed")
+  NO_SHOW     @map("no_show")
+  UNCONFIRMED @map("unconfirmed")
+  FAILED      @map("failed")
+
+  @@map("booking_status")
+}
+
+enum CalendarSyncStatus {
+  NOT_CREATED    @map("not_created")
+  CREATING       @map("creating")
+  CREATED        @map("created")
+  UPDATE_PENDING @map("update_pending")
+  DELETE_PENDING @map("delete_pending")
+  ERROR          @map("error")
+
+  @@map("calendar_sync_status")
+}
+
+model User {
+  id               String                 @id @default(uuid()) @db.Uuid
+  email            String                 @unique @db.VarChar(320)
+  displayName      String                 @map("display_name") @db.VarChar(120)
+  imageUrl         String?                @map("image_url") @db.Text
+  role             UserRole               @default(MEMBER)
+  status           UserStatus             @default(INVITED)
+  timezone         String                 @default("Asia/Tokyo") @db.VarChar(64)
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  googleAccounts   GoogleAccount[]
+  availabilities   UserAvailability[]
+  projectHosts     ProjectHost[]
+  assignedBookings Booking[]              @relation("AssignedHost")
+  statusChanges    BookingStatusHistory[] @relation("StatusChangedBy")
+
+  @@map("users")
+}
+
+model GoogleAccount {
+  id                    String               @id @default(uuid()) @db.Uuid
+  userId                String               @map("user_id") @db.Uuid
+  provider              String               @default("google") @db.VarChar(32)
+  providerAccountId     String               @map("provider_account_id") @db.VarChar(255)
+  accessTokenEncrypted  String?              @map("access_token_encrypted") @db.Text
+  refreshTokenEncrypted String?              @map("refresh_token_encrypted") @db.Text
+  tokenExpiresAt        DateTime?            @map("token_expires_at") @db.Timestamptz(3)
+  grantedScopes         String?              @map("granted_scopes") @db.Text
+  lastRefreshErrorAt    DateTime?            @map("last_refresh_error_at") @db.Timestamptz(3)
+  createdAt             DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  calendars             CalendarConnection[]
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("google_accounts")
+}
+
+model CalendarConnection {
+  id                 String        @id @default(uuid()) @db.Uuid
+  googleAccountId    String        @map("google_account_id") @db.Uuid
+  calendarId         String        @map("calendar_id") @db.VarChar(255)
+  displayName        String?       @map("display_name") @db.VarChar(255)
+  isPrimary          Boolean       @default(false) @map("is_primary")
+  useForAvailability Boolean       @default(true) @map("use_for_availability")
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  googleAccount      GoogleAccount @relation(fields: [googleAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([googleAccountId, calendarId])
+  @@map("calendar_connections")
+}
+
+model Project {
+  id                     String                @id @default(uuid()) @db.Uuid
+  name                   String                @db.VarChar(160)
+  slug                   String                @unique @db.VarChar(120)
+  description            String?               @db.Text
+  assignmentMode         AssignmentMode        @default(ROUND_ROBIN) @map("assignment_mode")
+  durationMinutes        Int                   @map("duration_minutes")
+  bookingWindowDays      Int                   @default(30) @map("booking_window_days")
+  minimumLeadHours       Int                   @default(24) @map("minimum_lead_hours")
+  changeCutoffHours      Int                   @default(24) @map("change_cutoff_hours")
+  bufferBeforeMinutes    Int                   @default(0) @map("buffer_before_minutes")
+  bufferAfterMinutes     Int                   @default(0) @map("buffer_after_minutes")
+  perHostDailyLimit      Int?                  @map("per_host_daily_limit")
+  projectDailyLimit      Int?                  @map("project_daily_limit")
+  reminderOneHourEnabled Boolean               @default(false) @map("reminder_one_hour_enabled")
+  logoUrl                String?               @map("logo_url") @db.Text
+  mainColor              String?               @map("main_color") @db.VarChar(7)
+  isActive               Boolean               @default(false) @map("is_active")
+  createdAt              DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  hosts                  ProjectHost[]
+  availabilities         ProjectAvailability[]
+  formFields             FormField[]
+  bookings               Booking[]
+
+  @@map("projects")
+}
+
+model ProjectHost {
+  id        String  @id @default(uuid()) @db.Uuid
+  projectId String  @map("project_id") @db.Uuid
+  userId    String  @map("user_id") @db.Uuid
+  priority  Int?
+  isActive  Boolean @default(true) @map("is_active")
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("project_hosts")
+}
+
+model UserAvailability {
+  id          String @id @default(uuid()) @db.Uuid
+  userId      String @map("user_id") @db.Uuid
+  weekday     Int
+  startMinute Int    @map("start_minute")
+  endMinute   Int    @map("end_minute")
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, weekday])
+  @@map("user_availabilities")
+}
+
+model ProjectAvailability {
+  id          String  @id @default(uuid()) @db.Uuid
+  projectId   String  @map("project_id") @db.Uuid
+  weekday     Int
+  startMinute Int     @map("start_minute")
+  endMinute   Int     @map("end_minute")
+  project     Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, weekday])
+  @@map("project_availabilities")
+}
+
+model FormField {
+  id         String          @id @default(uuid()) @db.Uuid
+  projectId  String          @map("project_id") @db.Uuid
+  key        String          @db.VarChar(80)
+  label      String          @db.VarChar(160)
+  type       FormFieldType
+  isRequired Boolean         @default(false) @map("is_required")
+  sortOrder  Int             @map("sort_order")
+  options    Json?
+  project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  answers    BookingAnswer[]
+
+  @@unique([projectId, key])
+  @@unique([projectId, sortOrder])
+  @@map("form_fields")
+}
+
+model Booking {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  projectId            String                 @map("project_id") @db.Uuid
+  hostId               String                 @map("host_id") @db.Uuid
+  status               BookingStatus          @default(HELD)
+  startsAt             DateTime               @map("starts_at") @db.Timestamptz(3)
+  endsAt               DateTime               @map("ends_at") @db.Timestamptz(3)
+  blockedStartsAt      DateTime               @map("blocked_starts_at") @db.Timestamptz(3)
+  blockedEndsAt        DateTime               @map("blocked_ends_at") @db.Timestamptz(3)
+  timezone             String                 @default("Asia/Tokyo") @db.VarChar(64)
+  guestNameEncrypted   String                 @map("guest_name_encrypted") @db.Text
+  guestEmailEncrypted  String                 @map("guest_email_encrypted") @db.Text
+  guestEmailLookupHash String                 @map("guest_email_lookup_hash") @db.Char(64)
+  guestPhoneEncrypted  String?                @map("guest_phone_encrypted") @db.Text
+  managementTokenHash  String                 @unique @map("management_token_hash") @db.Char(64)
+  idempotencyKey       String                 @unique @map("idempotency_key") @db.VarChar(120)
+  calendarId           String?                @map("calendar_id") @db.VarChar(255)
+  googleEventId        String?                @map("google_event_id") @db.VarChar(255)
+  googleMeetUrl        String?                @map("google_meet_url") @db.Text
+  calendarSyncStatus   CalendarSyncStatus     @default(NOT_CREATED) @map("calendar_sync_status")
+  holdExpiresAt        DateTime?              @map("hold_expires_at") @db.Timestamptz(3)
+  cancelledAt          DateTime?              @map("cancelled_at") @db.Timestamptz(3)
+  completedAt          DateTime?              @map("completed_at") @db.Timestamptz(3)
+  rescheduledFromId    String?                @unique @map("rescheduled_from_id") @db.Uuid
+  createdAt            DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  project              Project                @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  host                 User                   @relation("AssignedHost", fields: [hostId], references: [id], onDelete: Restrict)
+  rescheduledFrom      Booking?               @relation("RescheduledBooking", fields: [rescheduledFromId], references: [id], onDelete: SetNull)
+  rescheduledTo        Booking?               @relation("RescheduledBooking")
+  answers              BookingAnswer[]
+  statusHistory        BookingStatusHistory[]
+
+  @@index([projectId, startsAt])
+  @@index([hostId, startsAt])
+  @@index([guestEmailLookupHash, startsAt])
+  @@index([status, startsAt])
+  @@map("bookings")
+}
+
+model BookingAnswer {
+  id             String    @id @default(uuid()) @db.Uuid
+  bookingId      String    @map("booking_id") @db.Uuid
+  formFieldId    String    @map("form_field_id") @db.Uuid
+  fieldKey       String    @map("field_key") @db.VarChar(80)
+  fieldLabel     String    @map("field_label") @db.VarChar(160)
+  valueEncrypted String    @map("value_encrypted") @db.Text
+  booking        Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  formField      FormField @relation(fields: [formFieldId], references: [id], onDelete: Restrict)
+
+  @@unique([bookingId, formFieldId])
+  @@map("booking_answers")
+}
+
+model BookingStatusHistory {
+  id              String         @id @default(uuid()) @db.Uuid
+  bookingId       String         @map("booking_id") @db.Uuid
+  fromStatus      BookingStatus? @map("from_status")
+  toStatus        BookingStatus  @map("to_status")
+  changedByUserId String?        @map("changed_by_user_id") @db.Uuid
+  reason          String?        @db.Text
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  booking         Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  changedByUser   User?          @relation("StatusChangedBy", fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([bookingId, createdAt])
+  @@map("booking_status_history")
+}

@@ -1,0 +1,29 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "firstai-booking",
+	"main": ".open-next/worker.js",
+	"compatibility_date": "2026-05-28",
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"services": [
+		{
+			"binding": "WORKER_SELF_REFERENCE",
+			"service": "firstai-booking"
+		}
+	],
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "47672aa7c64a4b27a286720faf695023"
+		}
+	],
+	"images": {
+		"binding": "IMAGES"
+	}
+}

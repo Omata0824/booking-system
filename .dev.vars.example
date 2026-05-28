@@ -1,0 +1,10 @@
+NEXTJS_ENV=development
+
+# Used by wrangler preview for the HYPERDRIVE binding.
+# Do not commit real credentials.
+CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=postgres://user:password@localhost:5432/booking
+
+# Set these in Cloudflare Workers secrets for deployed environments.
+AUTH_SECRET=
+AUTH_GOOGLE_ID=
+AUTH_GOOGLE_SECRET=
