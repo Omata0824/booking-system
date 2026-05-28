@@ -1,12 +1,7 @@
 import "server-only";
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { Pool, type PoolClient, type QueryResultRow } from "pg";
-
-type DbGlobal = typeof globalThis & {
-  pgPool?: Pool;
-  pgConnectionString?: string;
-};
+import { Client, type QueryResultRow } from "pg";
 
 type CloudflareContextWithHyperdrive = {
   env?: {
@@ -33,39 +28,41 @@ export function hasDatabaseUrl() {
   return Boolean(getDatabaseUrl());
 }
 
-export function getPool() {
+function createClient() {
   const connectionString = getDatabaseUrl();
 
   if (!connectionString) {
     throw new Error("DATABASE_URL or HYPERDRIVE binding is not set.");
   }
 
-  const globalForDb = globalThis as DbGlobal;
-
-  if (
-    !globalForDb.pgPool ||
-    globalForDb.pgConnectionString !== connectionString
-  ) {
-    globalForDb.pgPool = new Pool({ connectionString });
-    globalForDb.pgConnectionString = connectionString;
-  }
-
-  return globalForDb.pgPool;
+  return new Client({
+    connectionString,
+    connectionTimeoutMillis: 5000,
+    query_timeout: 10000,
+  });
 }
 
 export async function query<T extends QueryResultRow>(
   text: string,
   values: unknown[] = [],
 ) {
-  return getPool().query<T>(text, values);
+  const client = createClient();
+
+  try {
+    await client.connect();
+    return await client.query<T>(text, values);
+  } finally {
+    await client.end();
+  }
 }
 
 export async function transaction<T>(
-  callback: (client: PoolClient) => Promise<T>,
+  callback: (client: Client) => Promise<T>,
 ) {
-  const client = await getPool().connect();
+  const client = createClient();
 
   try {
+    await client.connect();
     await client.query("begin");
     const result = await callback(client);
     await client.query("commit");
@@ -74,6 +71,6 @@ export async function transaction<T>(
     await client.query("rollback");
     throw error;
   } finally {
-    client.release();
+    await client.end();
   }
 }
