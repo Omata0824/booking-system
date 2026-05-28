@@ -2,13 +2,6 @@ import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getMembers } from "@/lib/admin-members";
-import {
-  activateMember,
-  approveMember,
-  deleteMember,
-  disableMember,
-  updateMemberRole,
-} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +91,12 @@ export default async function AdminMembersPage() {
                     </div>
                   </div>
 
-                  <form action={updateMemberRole} className="flex items-start gap-2">
+                  <form
+                    action="/admin/members/update"
+                    className="flex items-start gap-2"
+                    method="post"
+                  >
+                    <input name="operation" type="hidden" value="role" />
                     <input name="userId" type="hidden" value={member.id} />
                     <select
                       className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
@@ -132,7 +130,8 @@ export default async function AdminMembersPage() {
 
                   <div className="flex flex-wrap gap-2 lg:justify-end">
                     {member.status === "invited" && (
-                      <form action={approveMember}>
+                      <form action="/admin/members/update" method="post">
+                        <input name="operation" type="hidden" value="approve" />
                         <input name="userId" type="hidden" value={member.id} />
                         <button className="rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700">
                           承認
@@ -140,14 +139,16 @@ export default async function AdminMembersPage() {
                       </form>
                     )}
                     {member.status === "disabled" ? (
-                      <form action={activateMember}>
+                      <form action="/admin/members/update" method="post">
+                        <input name="operation" type="hidden" value="activate" />
                         <input name="userId" type="hidden" value={member.id} />
                         <button className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                           有効化
                         </button>
                       </form>
                     ) : (
-                      <form action={disableMember}>
+                      <form action="/admin/members/update" method="post">
+                        <input name="operation" type="hidden" value="disable" />
                         <input name="userId" type="hidden" value={member.id} />
                         <button
                           className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
@@ -157,7 +158,8 @@ export default async function AdminMembersPage() {
                         </button>
                       </form>
                     )}
-                    <form action={deleteMember}>
+                    <form action="/admin/members/update" method="post">
+                      <input name="operation" type="hidden" value="delete" />
                       <input name="userId" type="hidden" value={member.id} />
                       <button
                         className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"

@@ -4,7 +4,7 @@ import { AppHeader } from "@/components/app-header";
 import { getAdminProjectDetail } from "@/lib/admin-projects";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getProjectHostOptions } from "@/lib/projects";
-import { deleteProject, updateProject } from "./actions";
+import { updateProject } from "./actions";
 
 const weekdays = [
   { value: 1, label: "月" },
@@ -268,7 +268,8 @@ export default async function AdminProjectDetailPage({
               </p>
               <button
                 className="mt-4 w-full rounded-xl border border-red-200 px-5 py-3 text-sm font-semibold text-red-700 hover:bg-red-50"
-                formAction={deleteProject}
+                formAction="/admin/projects/delete"
+                formMethod="post"
               >
                 このプロジェクトを削除
               </button>

@@ -2,7 +2,6 @@ import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { requireActiveMember } from "@/lib/admin-auth";
 import { getMemberSettings } from "@/lib/admin-members";
-import { updateMySettings } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +50,11 @@ export default async function AdminSettingsPage({
           </p>
         )}
 
-        <form action={updateMySettings} className="grid gap-6 lg:grid-cols-[1fr_280px]">
+        <form
+          action="/admin/settings/update"
+          className="grid gap-6 lg:grid-cols-[1fr_280px]"
+          method="post"
+        >
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold">プロフィール</h2>
             <div className="mt-5 grid gap-5">
