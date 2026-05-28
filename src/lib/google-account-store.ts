@@ -9,6 +9,22 @@ type StoredGoogleAccountRow = {
   token_expires_at: Date | null;
 };
 
+const defaultOwnerEmails = ["ryohei0824@gmail.com"];
+
+function getOwnerEmails() {
+  return [
+    ...defaultOwnerEmails,
+    ...(process.env.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  ];
+}
+
+function isOwnerEmail(email: string) {
+  return getOwnerEmails().includes(email.toLowerCase());
+}
+
 function storeToken(value: string | null | undefined) {
   return value ? `plain:${value}` : null;
 }
@@ -36,6 +52,7 @@ export async function saveGoogleAccount(params: {
   }
 
   const email = params.email.toLowerCase();
+  const isOwner = isOwnerEmail(email);
   const now = new Date();
   const tokenExpiresAt = params.expiresAt
     ? new Date(params.expiresAt * 1000)
@@ -48,12 +65,21 @@ export async function saveGoogleAccount(params: {
           insert into users (
             id, email, display_name, image_url, role, status, updated_at
           )
-          values ($1, $2, $3, $4, 'member', 'active', $5)
+          values (
+            $1,
+            $2,
+            $3,
+            $4,
+            case when $6 then 'admin'::user_role else 'member'::user_role end,
+            case when $6 then 'active'::user_status else 'invited'::user_status end,
+            $5
+          )
           on conflict (email) do update
           set
             display_name = excluded.display_name,
             image_url = excluded.image_url,
-            status = 'active',
+            role = case when $6 then 'admin'::user_role else users.role end,
+            status = case when $6 then 'active'::user_status else users.status end,
             updated_at = excluded.updated_at
           returning id
         `,
@@ -63,6 +89,7 @@ export async function saveGoogleAccount(params: {
           params.name || email,
           params.image || null,
           now,
+          isOwner,
         ],
       );
       const userId = userResult.rows[0].id;

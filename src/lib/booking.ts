@@ -77,6 +77,10 @@ type AvailabilityRow = {
   end_minute: number;
 };
 
+type UserAvailabilityRow = AvailabilityRow & {
+  user_id: string;
+};
+
 type HostRow = {
   user_id: string;
   display_name: string;
@@ -140,6 +144,27 @@ function formatMinute(minute: number) {
 
 function overlaps(start: Date, end: Date, busy: { starts_at: Date; ends_at: Date }) {
   return busy.starts_at < end && busy.ends_at > start;
+}
+
+function isWithinUserAvailability(
+  userId: string,
+  weekday: number,
+  startMinute: number,
+  endMinute: number,
+  userAvailabilities: UserAvailabilityRow[],
+) {
+  const rows = userAvailabilities.filter((item) => item.user_id === userId);
+
+  if (rows.length === 0) {
+    return true;
+  }
+
+  return rows.some(
+    (item) =>
+      item.weekday === weekday &&
+      item.start_minute <= startMinute &&
+      item.end_minute >= endMinute,
+  );
 }
 
 function mockBookingPage(slug: string): BookingPageProject {
@@ -236,6 +261,15 @@ export async function getBookingPageProject(
     `,
     [project.id],
   );
+  const userAvailabilityResult = await query<UserAvailabilityRow>(
+    `
+      select user_id, weekday, start_minute, end_minute
+      from user_availabilities
+      where user_id = any($1::uuid[])
+      order by user_id asc, weekday asc, start_minute asc
+    `,
+    [hosts.map((host) => host.user_id)],
+  );
   const now = new Date();
   const earliestStart = new Date(
     now.getTime() + project.minimum_lead_hours * 60 * 60 * 1000,
@@ -288,6 +322,13 @@ export async function getBookingPageProject(
               : hosts.filter((host) => {
                   const googleBusy = googleBusyByHost.get(host.user_id) ?? [];
                   return (
+                    isWithinUserAvailability(
+                      host.user_id,
+                      weekday,
+                      minute,
+                      minute + project.duration_minutes,
+                      userAvailabilityResult.rows,
+                    ) &&
                     !bookings.some(
                       (booking) =>
                         booking.host_id === host.user_id && overlaps(start, end, booking),
@@ -369,6 +410,12 @@ export async function createBooking(params: {
     }
 
     const end = new Date(start.getTime() + project.duration_minutes * 60 * 1000);
+    const startParts = getJstDateParts(start);
+    const weekday = getWeekday(startParts);
+    const startMinute =
+      start.getUTCHours() * 60 + start.getUTCMinutes() + jstOffsetMinutes;
+    const normalizedStartMinute = startMinute >= 24 * 60 ? startMinute - 24 * 60 : startMinute;
+    const endMinute = normalizedStartMinute + project.duration_minutes;
     const conflictResult = await client.query<{ host_id: string }>(
       `
         select host_id
@@ -380,6 +427,14 @@ export async function createBooking(params: {
       `,
       [project.id, blockingStatuses, end, start],
     );
+    const userAvailabilityResult = await client.query<UserAvailabilityRow>(
+      `
+        select user_id, weekday, start_minute, end_minute
+        from user_availabilities
+        where user_id = any($1::uuid[])
+      `,
+      [hosts.map((candidate) => candidate.user_id)],
+    );
     const googleBusyByHost = await getHostCalendarBusyPeriods(
       hosts.map((candidate) => candidate.user_id),
       start,
@@ -389,6 +444,13 @@ export async function createBooking(params: {
       (candidate) => {
         const googleBusy = googleBusyByHost.get(candidate.user_id) ?? [];
         return (
+          isWithinUserAvailability(
+            candidate.user_id,
+            weekday,
+            normalizedStartMinute,
+            endMinute,
+            userAvailabilityResult.rows,
+          ) &&
           !conflictResult.rows.some(
             (booking) => booking.host_id === candidate.user_id,
           ) && !googleBusy.some((busy) => overlaps(start, end, busy))
