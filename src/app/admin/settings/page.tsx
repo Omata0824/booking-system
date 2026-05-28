@@ -16,8 +16,13 @@ const weekdays = [
   { value: 0, label: "日" },
 ];
 
-export default async function AdminSettingsPage() {
+export default async function AdminSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ saved?: string }>;
+}) {
   const user = await requireActiveMember();
+  const { saved } = await searchParams;
   const settings = await getMemberSettings(user.id);
   const selectedWeekdays = new Set(
     settings?.availabilities.map((item) => item.weekday) ?? [1, 2, 3, 4, 5],
@@ -39,6 +44,12 @@ export default async function AdminSettingsPage() {
             予約担当者として表示される名前と、基本の稼働時間を設定します。
           </p>
         </div>
+
+        {saved === "1" && (
+          <p className="mb-6 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-700">
+            設定を保存しました。
+          </p>
+        )}
 
         <form action={updateMySettings} className="grid gap-6 lg:grid-cols-[1fr_280px]">
           <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

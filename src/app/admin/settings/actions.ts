@@ -2,6 +2,7 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireActiveMember } from "@/lib/admin-auth";
 import { transaction } from "@/lib/db";
 
@@ -96,4 +97,5 @@ export async function updateMySettings(formData: FormData) {
 
   revalidatePath("/admin/settings");
   revalidatePath("/admin/members");
+  redirect("/admin/settings?saved=1");
 }

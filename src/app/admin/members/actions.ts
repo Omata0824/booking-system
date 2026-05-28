@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
 import { query, transaction } from "@/lib/db";
 
@@ -27,6 +28,7 @@ export async function approveMember(formData: FormData) {
 
   revalidatePath("/admin/members");
   revalidatePath("/admin/projects/new");
+  redirect("/admin/members");
 }
 
 export async function disableMember(formData: FormData) {
@@ -47,6 +49,7 @@ export async function disableMember(formData: FormData) {
   );
 
   revalidatePath("/admin/members");
+  redirect("/admin/members");
 }
 
 export async function activateMember(formData: FormData) {
@@ -68,6 +71,7 @@ export async function activateMember(formData: FormData) {
 
   revalidatePath("/admin/members");
   revalidatePath("/admin/projects/new");
+  redirect("/admin/members");
 }
 
 export async function updateMemberRole(formData: FormData) {
@@ -89,6 +93,7 @@ export async function updateMemberRole(formData: FormData) {
   );
 
   revalidatePath("/admin/members");
+  redirect("/admin/members");
 }
 
 export async function deleteMember(formData: FormData) {
@@ -135,4 +140,5 @@ export async function deleteMember(formData: FormData) {
   revalidatePath("/admin/members");
   revalidatePath("/admin/projects/new");
   revalidatePath("/admin");
+  redirect("/admin/members");
 }
