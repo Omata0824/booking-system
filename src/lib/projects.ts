@@ -1,5 +1,4 @@
-import { AssignmentMode } from "@/generated/prisma/enums";
-import { getPrisma, hasDatabaseUrl } from "@/lib/prisma";
+import { hasDatabaseUrl, query } from "@/lib/db";
 import { mockProject, mockProjects } from "@/lib/mock-data";
 
 export type ProjectListItem = {
@@ -22,10 +21,28 @@ export type ProjectHostOption = {
   email: string;
 };
 
-const assignmentModeLabel: Record<AssignmentMode, string> = {
-  ROUND_ROBIN: "誰か1人が参加",
-  PRIORITY: "優先度順",
-  RANDOM: "ランダム",
+type ProjectListRow = {
+  id: string;
+  name: string;
+  slug: string;
+  duration_minutes: number;
+  assignment_mode: string;
+  is_active: boolean;
+  main_color: string | null;
+  bookings_count: string;
+};
+
+type HostRow = {
+  project_id?: string;
+  id: string;
+  display_name: string;
+  email: string;
+};
+
+const assignmentModeLabel: Record<string, string> = {
+  round_robin: "誰か1人が参加",
+  priority: "優先度順",
+  random: "ランダム",
 };
 
 export async function getProjectList(): Promise<ProjectListItem[]> {
@@ -34,31 +51,42 @@ export async function getProjectList(): Promise<ProjectListItem[]> {
   }
 
   try {
-    const prisma = getPrisma();
-    const projects = await prisma.project.findMany({
-      orderBy: [{ isActive: "desc" }, { createdAt: "desc" }],
-      include: {
-        hosts: {
-          where: { isActive: true },
-          include: { user: true },
-          orderBy: [{ priority: "asc" }],
-        },
-        _count: {
-          select: { bookings: true },
-        },
-      },
-    });
+    const projectsResult = await query<ProjectListRow>(`
+      select
+        p.id,
+        p.name,
+        p.slug,
+        p.duration_minutes,
+        p.assignment_mode,
+        p.is_active,
+        p.main_color,
+        count(b.id)::text as bookings_count
+      from projects p
+      left join bookings b on b.project_id = p.id
+      group by p.id
+      order by p.is_active desc, p.created_at desc
+    `);
+    const hostsResult = await query<HostRow>(`
+      select ph.project_id, u.id, u.display_name, u.email
+      from project_hosts ph
+      join users u on u.id = ph.user_id
+      where ph.is_active = true
+      order by ph.priority asc nulls last, u.display_name asc
+    `);
 
-    return projects.map((project) => ({
+    return projectsResult.rows.map((project) => ({
       name: project.name,
       slug: project.slug,
-      durationMinutes: project.durationMinutes,
-      hosts: project.hosts.map((host) => host.user.displayName),
-      assignmentMode: assignmentModeLabel[project.assignmentMode],
-      bookingsThisMonth: project._count.bookings,
+      durationMinutes: project.duration_minutes,
+      hosts: hostsResult.rows
+        .filter((host) => host.project_id === project.id)
+        .map((host) => host.display_name),
+      assignmentMode:
+        assignmentModeLabel[project.assignment_mode] ?? project.assignment_mode,
+      bookingsThisMonth: Number(project.bookings_count),
       upcomingBookings: 0,
-      status: project.isActive ? "公開中" : "下書き",
-      color: project.mainColor ?? "#2257d6",
+      status: project.is_active ? "公開中" : "下書き",
+      color: project.main_color ?? "#2257d6",
     }));
   } catch (error) {
     console.error("Failed to load projects from database.", error);
@@ -72,16 +100,18 @@ export async function getProjectHostOptions(): Promise<ProjectHostOption[]> {
   }
 
   try {
-    const prisma = getPrisma();
-    return await prisma.user.findMany({
-      where: { status: "ACTIVE" },
-      orderBy: [{ role: "asc" }, { displayName: "asc" }],
-      select: {
-        id: true,
-        displayName: true,
-        email: true,
-      },
-    });
+    const result = await query<HostRow>(`
+      select id, display_name, email
+      from users
+      where status = 'active'
+      order by role asc, display_name asc
+    `);
+
+    return result.rows.map((host) => ({
+      id: host.id,
+      displayName: host.display_name,
+      email: host.email,
+    }));
   } catch (error) {
     console.error("Failed to load host options from database.", error);
     return [];
@@ -94,28 +124,44 @@ export async function getPublicProjectBySlug(slug: string): Promise<PublicProjec
   }
 
   try {
-    const prisma = getPrisma();
-    const project = await prisma.project.findUnique({
-      where: { slug },
-      include: {
-        hosts: { where: { isActive: true }, include: { user: true } },
-      },
-    });
+    const projectResult = await query<
+      ProjectListRow & { description: string | null }
+    >(
+      `
+        select id, name, slug, description, duration_minutes, assignment_mode, is_active, main_color, '0' as bookings_count
+        from projects
+        where slug = $1
+      `,
+      [slug],
+    );
+    const project = projectResult.rows[0];
 
     if (!project) {
       return mockProject;
     }
+
+    const hostsResult = await query<HostRow>(
+      `
+        select ph.project_id, u.id, u.display_name, u.email
+        from project_hosts ph
+        join users u on u.id = ph.user_id
+        where ph.project_id = $1 and ph.is_active = true
+        order by ph.priority asc nulls last, u.display_name asc
+      `,
+      [project.id],
+    );
 
     return {
       ...mockProject,
       name: project.name,
       slug: project.slug,
       description: project.description ?? mockProject.description,
-      durationMinutes: project.durationMinutes,
-      hosts: project.hosts.map((host) => host.user.displayName),
-      assignmentMode: assignmentModeLabel[project.assignmentMode],
-      color: project.mainColor ?? mockProject.color,
-      status: project.isActive ? "公開中" : "下書き",
+      durationMinutes: project.duration_minutes,
+      hosts: hostsResult.rows.map((host) => host.display_name),
+      assignmentMode:
+        assignmentModeLabel[project.assignment_mode] ?? project.assignment_mode,
+      color: project.main_color ?? mockProject.color,
+      status: project.is_active ? "公開中" : "下書き",
     };
   } catch (error) {
     console.error("Failed to load public project from database.", error);

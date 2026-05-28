@@ -1,18 +1,13 @@
 import "server-only";
 
 import { createHash, randomUUID } from "crypto";
-import { BookingStatus } from "@/generated/prisma/enums";
-import { getPrisma, hasDatabaseUrl } from "@/lib/prisma";
+import { hasDatabaseUrl, query, transaction } from "@/lib/db";
 import { mockProject } from "@/lib/mock-data";
 
 const timezone = "Asia/Tokyo";
 const jstOffsetMinutes = 9 * 60;
 const dayNames = ["日", "月", "火", "水", "木", "金", "土"];
-const blockingStatuses = [
-  BookingStatus.HELD,
-  BookingStatus.CONFIRMED,
-  BookingStatus.UNCONFIRMED,
-];
+const blockingStatuses = ["held", "confirmed", "unconfirmed"];
 
 export type BookingSlot = {
   startIso: string;
@@ -54,6 +49,43 @@ type JstDateParts = {
   year: number;
   month: number;
   day: number;
+};
+
+type ProjectRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  duration_minutes: number;
+  booking_window_days: number;
+  minimum_lead_hours: number;
+  buffer_before_minutes: number;
+  buffer_after_minutes: number;
+  main_color: string | null;
+  is_active: boolean;
+};
+
+type AvailabilityRow = {
+  weekday: number;
+  start_minute: number;
+  end_minute: number;
+};
+
+type HostRow = {
+  user_id: string;
+  display_name: string;
+};
+
+type BusyRow = {
+  host_id: string;
+  starts_at: Date;
+  ends_at: Date;
+};
+
+type FormFieldRow = {
+  id: string;
+  key: string;
+  label: string;
 };
 
 function getJstDateParts(date: Date): JstDateParts {
@@ -100,12 +132,8 @@ function formatMinute(minute: number) {
   return `${String(hour).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-function overlaps(
-  start: Date,
-  end: Date,
-  busy: { startsAt: Date; endsAt: Date },
-) {
-  return busy.startsAt < end && busy.endsAt > start;
+function overlaps(start: Date, end: Date, busy: { starts_at: Date; ends_at: Date }) {
+  return busy.starts_at < end && busy.ends_at > start;
 }
 
 function mockBookingPage(slug: string): BookingPageProject {
@@ -161,70 +189,92 @@ export async function getBookingPageProject(
     return mockBookingPage(slug);
   }
 
-  const prisma = getPrisma();
-  const project = await prisma.project.findUnique({
-    where: { slug },
-    include: {
-      availabilities: true,
-      hosts: {
-        where: { isActive: true },
-        include: { user: true },
-        orderBy: [{ priority: "asc" }],
-      },
-    },
-  });
+  const projectResult = await query<ProjectRow>(
+    `
+      select id, name, slug, description, duration_minutes, booking_window_days,
+        minimum_lead_hours, buffer_before_minutes, buffer_after_minutes,
+        main_color, is_active
+      from projects
+      where slug = $1
+    `,
+    [slug],
+  );
+  const project = projectResult.rows[0];
 
-  if (!project || !project.isActive || project.hosts.length === 0) {
+  if (!project || !project.is_active) {
     return null;
   }
 
+  const hostsResult = await query<HostRow>(
+    `
+      select ph.user_id, u.display_name
+      from project_hosts ph
+      join users u on u.id = ph.user_id
+      where ph.project_id = $1 and ph.is_active = true
+      order by ph.priority asc nulls last, u.display_name asc
+    `,
+    [project.id],
+  );
+  const hosts = hostsResult.rows;
+
+  if (hosts.length === 0) {
+    return null;
+  }
+
+  const availabilityResult = await query<AvailabilityRow>(
+    `
+      select weekday, start_minute, end_minute
+      from project_availabilities
+      where project_id = $1
+      order by weekday asc, start_minute asc
+    `,
+    [project.id],
+  );
   const now = new Date();
   const earliestStart = new Date(
-    now.getTime() + project.minimumLeadHours * 60 * 60 * 1000,
+    now.getTime() + project.minimum_lead_hours * 60 * 60 * 1000,
   );
   const today = getJstDateParts(now);
-  const daysToGenerate = Math.min(project.bookingWindowDays, 21);
+  const daysToGenerate = Math.min(project.booking_window_days, 21);
   const rangeEnd = createDateFromJst(addDays(today, daysToGenerate + 1), 0);
-  const bookings = await prisma.booking.findMany({
-    where: {
-      projectId: project.id,
-      status: { in: blockingStatuses },
-      startsAt: { lt: rangeEnd },
-      endsAt: { gt: now },
-    },
-    select: {
-      hostId: true,
-      startsAt: true,
-      endsAt: true,
-    },
-  });
+  const bookingsResult = await query<BusyRow>(
+    `
+      select host_id, starts_at, ends_at
+      from bookings
+      where project_id = $1
+        and status = any($2::booking_status[])
+        and starts_at < $3
+        and ends_at > $4
+    `,
+    [project.id, blockingStatuses, rangeEnd, now],
+  );
+  const bookings = bookingsResult.rows;
 
   const days = Array.from({ length: daysToGenerate }, (_, index) => {
     const parts = addDays(today, index);
     const weekday = getWeekday(parts);
-    const availability = project.availabilities.filter(
+    const availability = availabilityResult.rows.filter(
       (item) => item.weekday === weekday,
     );
 
     const slots = availability.flatMap((item) => {
       const entries: BookingSlot[] = [];
       for (
-        let minute = item.startMinute;
-        minute + project.durationMinutes <= item.endMinute;
-        minute += project.durationMinutes
+        let minute = item.start_minute;
+        minute + project.duration_minutes <= item.end_minute;
+        minute += project.duration_minutes
       ) {
         const start = createDateFromJst(parts, minute);
-        const end = createDateFromJst(parts, minute + project.durationMinutes);
+        const end = createDateFromJst(parts, minute + project.duration_minutes);
 
         if (start < earliestStart) {
           continue;
         }
 
-        const availableHostCount = project.hosts.filter(
+        const availableHostCount = hosts.filter(
           (host) =>
             !bookings.some(
-              (booking) =>
-                booking.hostId === host.userId && overlaps(start, end, booking),
+              (booking) => booking.host_id === host.user_id && overlaps(start, end, booking),
             ),
         ).length;
 
@@ -235,7 +285,7 @@ export async function getBookingPageProject(
         entries.push({
           startIso: start.toISOString(),
           endIso: end.toISOString(),
-          label: `${formatMinute(minute)} - ${formatMinute(minute + project.durationMinutes)}`,
+          label: `${formatMinute(minute)} - ${formatMinute(minute + project.duration_minutes)}`,
           availableHostCount,
         });
       }
@@ -256,9 +306,9 @@ export async function getBookingPageProject(
     name: project.name,
     slug: project.slug,
     description: project.description ?? "",
-    durationMinutes: project.durationMinutes,
-    color: project.mainColor ?? "#2257d6",
-    hosts: project.hosts.map((host) => host.user.displayName),
+    durationMinutes: project.duration_minutes,
+    color: project.main_color ?? "#2257d6",
+    hosts: hosts.map((host) => host.display_name),
     timezone,
     days,
   };
@@ -272,74 +322,108 @@ export async function createBooking(params: {
   company?: string;
   comment?: string;
 }): Promise<BookingResult> {
-  const prisma = getPrisma();
   const start = new Date(params.startIso);
 
   if (Number.isNaN(start.getTime())) {
     throw new Error("日時を正しく選択してください。");
   }
 
-  return await prisma.$transaction(async (tx) => {
-    const project = await tx.project.findUnique({
-      where: { id: params.projectId },
-      include: {
-        formFields: { orderBy: { sortOrder: "asc" } },
-        hosts: {
-          where: { isActive: true },
-          include: { user: true },
-          orderBy: [{ priority: "asc" }],
-        },
-      },
-    });
+  return await transaction(async (client) => {
+    const projectResult = await client.query<ProjectRow>(
+      `
+        select id, name, slug, description, duration_minutes, booking_window_days,
+          minimum_lead_hours, buffer_before_minutes, buffer_after_minutes,
+          main_color, is_active
+        from projects
+        where id = $1
+      `,
+      [params.projectId],
+    );
+    const project = projectResult.rows[0];
 
-    if (!project || !project.isActive || project.hosts.length === 0) {
+    if (!project || !project.is_active) {
       throw new Error("この予約ページは現在利用できません。");
     }
 
-    const end = new Date(start.getTime() + project.durationMinutes * 60 * 1000);
-    const conflictingBookings = await tx.booking.findMany({
-      where: {
-        projectId: project.id,
-        status: { in: blockingStatuses },
-        startsAt: { lt: end },
-        endsAt: { gt: start },
-      },
-      select: { hostId: true },
-    });
-    const host = project.hosts.find(
+    const hostsResult = await client.query<HostRow>(
+      `
+        select ph.user_id, u.display_name
+        from project_hosts ph
+        join users u on u.id = ph.user_id
+        where ph.project_id = $1 and ph.is_active = true
+        order by ph.priority asc nulls last, u.display_name asc
+      `,
+      [project.id],
+    );
+    const hosts = hostsResult.rows;
+
+    if (hosts.length === 0) {
+      throw new Error("この予約ページは現在利用できません。");
+    }
+
+    const end = new Date(start.getTime() + project.duration_minutes * 60 * 1000);
+    const conflictResult = await client.query<{ host_id: string }>(
+      `
+        select host_id
+        from bookings
+        where project_id = $1
+          and status = any($2::booking_status[])
+          and starts_at < $3
+          and ends_at > $4
+      `,
+      [project.id, blockingStatuses, end, start],
+    );
+    const host = hosts.find(
       (candidate) =>
-        !conflictingBookings.some((booking) => booking.hostId === candidate.userId),
+        !conflictResult.rows.some((booking) => booking.host_id === candidate.user_id),
     );
 
     if (!host) {
       throw new Error("選択した時間は埋まりました。別の時間を選択してください。");
     }
 
-    const booking = await tx.booking.create({
-      data: {
-        projectId: project.id,
-        hostId: host.userId,
-        status: BookingStatus.CONFIRMED,
-        startsAt: start,
-        endsAt: end,
-        blockedStartsAt: new Date(
-          start.getTime() - project.bufferBeforeMinutes * 60 * 1000,
-        ),
-        blockedEndsAt: new Date(
-          end.getTime() + project.bufferAfterMinutes * 60 * 1000,
-        ),
+    const bookingResult = await client.query<{
+      id: string;
+      starts_at: Date;
+      ends_at: Date;
+    }>(
+      `
+        insert into bookings (
+          project_id, host_id, status, starts_at, ends_at,
+          blocked_starts_at, blocked_ends_at, timezone,
+          guest_name_encrypted, guest_email_encrypted, guest_email_lookup_hash,
+          management_token_hash, idempotency_key, calendar_sync_status
+        )
+        values (
+          $1, $2, 'confirmed', $3, $4, $5, $6, $7,
+          $8, $9, $10, $11, $12, 'not_created'
+        )
+        returning id, starts_at, ends_at
+      `,
+      [
+        project.id,
+        host.user_id,
+        start,
+        end,
+        new Date(start.getTime() - project.buffer_before_minutes * 60 * 1000),
+        new Date(end.getTime() + project.buffer_after_minutes * 60 * 1000),
         timezone,
-        guestNameEncrypted: `plain:${params.guestName}`,
-        guestEmailEncrypted: `plain:${params.guestEmail}`,
-        guestEmailLookupHash: createHash("sha256")
-          .update(params.guestEmail.toLowerCase())
-          .digest("hex"),
-        managementTokenHash: createHash("sha256").update(randomUUID()).digest("hex"),
-        idempotencyKey: randomUUID(),
-        calendarSyncStatus: "NOT_CREATED",
-      },
-    });
-
+        `plain:${params.guestName}`,
+        `plain:${params.guestEmail}`,
+        createHash("sha256").update(params.guestEmail.toLowerCase()).digest("hex"),
+        createHash("sha256").update(randomUUID()).digest("hex"),
+        randomUUID(),
+      ],
+    );
+    const booking = bookingResult.rows[0];
+    const fieldsResult = await client.query<FormFieldRow>(
+      `
+        select id, key, label
+        from form_fields
+        where project_id = $1
+      `,
+      [project.id],
+    );
     const answers = [
       ["company", "会社名", params.company ?? ""],
       ["name", "氏名", params.guestName],
@@ -348,28 +432,28 @@ export async function createBooking(params: {
     ];
 
     for (const [key, label, value] of answers) {
-      const field = project.formFields.find((item) => item.key === key);
+      const field = fieldsResult.rows.find((item) => item.key === key);
       if (!field || !value) {
         continue;
       }
 
-      await tx.bookingAnswer.create({
-        data: {
-          bookingId: booking.id,
-          formFieldId: field.id,
-          fieldKey: field.key,
-          fieldLabel: label,
-          valueEncrypted: `plain:${value}`,
-        },
-      });
+      await client.query(
+        `
+          insert into booking_answers (
+            booking_id, form_field_id, field_key, field_label, value_encrypted
+          )
+          values ($1, $2, $3, $4, $5)
+        `,
+        [booking.id, field.id, field.key, label, `plain:${value}`],
+      );
     }
 
     return {
       bookingId: booking.id,
       projectName: project.name,
-      startsAt: booking.startsAt.toISOString(),
-      endsAt: booking.endsAt.toISOString(),
-      hostName: host.user.displayName,
+      startsAt: booking.starts_at.toISOString(),
+      endsAt: booking.ends_at.toISOString(),
+      hostName: host.display_name,
       guestName: params.guestName,
     };
   });
