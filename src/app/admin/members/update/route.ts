@@ -90,34 +90,29 @@ export async function POST(request: NextRequest) {
         return;
       }
 
-      const bookingResult = await client.query<{ count: string }>(
-        "select count(*)::text as count from bookings where host_id = $1",
-        [userId],
+      const ownerResult = await client.query<{ id: string }>(
+        "select id from users where email = 'ryohei0824@gmail.com' limit 1",
       );
-      const bookingCount = Number(bookingResult.rows[0]?.count ?? 0);
+      const owner = ownerResult.rows[0];
 
-      if (bookingCount > 0) {
-        await client.query("delete from project_hosts where user_id = $1", [
-          userId,
-        ]);
-        await client.query("delete from user_availabilities where user_id = $1", [
-          userId,
-        ]);
-        await client.query("delete from google_accounts where user_id = $1", [
-          userId,
-        ]);
+      if (owner) {
         await client.query(
-          `
-            update users
-            set status = 'disabled', updated_at = CURRENT_TIMESTAMP
-            where id = $1
-          `,
-          [userId],
+          "update bookings set host_id = $2, updated_at = CURRENT_TIMESTAMP where host_id = $1",
+          [userId, owner.id],
         );
-        return;
+        await client.query(
+          "update booking_status_history set changed_by_user_id = $2 where changed_by_user_id = $1",
+          [userId, owner.id],
+        );
       }
 
       await client.query("delete from project_hosts where user_id = $1", [userId]);
+      await client.query("delete from user_availabilities where user_id = $1", [
+        userId,
+      ]);
+      await client.query("delete from google_accounts where user_id = $1", [
+        userId,
+      ]);
       await client.query("delete from users where id = $1", [userId]);
     });
   }

@@ -108,24 +108,20 @@ export default async function AdminSettingsPage({
                     </span>
                     <span>
                       <span className="mb-1 block text-xs text-slate-500">開始</span>
-                      <input
-                        className="block w-full rounded-xl border border-slate-300 px-3 py-2 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                        defaultValue={formatMinute(
+                      <TimeSelect
+                        name={`availabilityStart_${weekday.value}`}
+                        value={formatMinute(
                           availabilityByWeekday.get(weekday.value)?.startMinute ?? 10 * 60,
                         )}
-                        name={`availabilityStart_${weekday.value}`}
-                        type="time"
                       />
                     </span>
                     <span>
                       <span className="mb-1 block text-xs text-slate-500">終了</span>
-                      <input
-                        className="block w-full rounded-xl border border-slate-300 px-3 py-2 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                        defaultValue={formatMinute(
+                      <TimeSelect
+                        name={`availabilityEnd_${weekday.value}`}
+                        value={formatMinute(
                           availabilityByWeekday.get(weekday.value)?.endMinute ?? 20 * 60,
                         )}
-                        name={`availabilityEnd_${weekday.value}`}
-                        type="time"
                       />
                     </span>
                   </label>
@@ -175,8 +171,28 @@ function Info({ label, value }: { label: string; value: string }) {
   );
 }
 
+function TimeSelect({ name, value }: { name: string; value: string }) {
+  return (
+    <select
+      className="block w-full rounded-xl border border-slate-300 px-3 py-2 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+      defaultValue={value}
+      name={name}
+    >
+      {timeOptions.map((time) => (
+        <option key={time} value={time}>
+          {time}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function formatMinute(minute: number) {
   const hour = Math.floor(minute / 60);
   const minutes = minute % 60;
   return `${String(hour).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
+
+const timeOptions = Array.from({ length: 48 }, (_, index) =>
+  formatMinute(index * 30),
+);
