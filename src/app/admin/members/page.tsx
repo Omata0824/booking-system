@@ -168,6 +168,17 @@ export default async function AdminMembersPage() {
                         削除
                       </button>
                     </form>
+                    {member.email === "ryohei0824@gmail.com" && (
+                      <p className="basis-full text-right text-xs text-slate-400">
+                        オーナーは削除できません
+                      </p>
+                    )}
+                    {member.email !== "ryohei0824@gmail.com" &&
+                      member.assignedBookingCount > 0 && (
+                        <p className="basis-full text-right text-xs text-slate-400">
+                          削除すると一覧から非表示になります
+                        </p>
+                      )}
                   </div>
                 </article>
               ))}

@@ -122,6 +122,15 @@ export async function deleteMember(formData: FormData) {
     const bookingCount = Number(bookingResult.rows[0]?.count ?? 0);
 
     if (bookingCount > 0) {
+      await client.query("delete from project_hosts where user_id = $1", [
+        userId,
+      ]);
+      await client.query("delete from user_availabilities where user_id = $1", [
+        userId,
+      ]);
+      await client.query("delete from google_accounts where user_id = $1", [
+        userId,
+      ]);
       await client.query(
         `
           update users

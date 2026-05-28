@@ -81,6 +81,10 @@ export async function getMembers(): Promise<MemberListItem[]> {
     left join bookings b on b.host_id = u.id
     left join google_accounts ga on ga.user_id = u.id
     group by u.id
+    having not (
+      u.status = 'disabled'
+      and count(distinct ph.project_id) = 0
+    )
     order by
       case u.status
         when 'invited' then 0
