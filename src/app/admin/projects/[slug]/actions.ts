@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
-import { transaction } from "@/lib/db";
+import { query, transaction } from "@/lib/db";
 
 const assignmentModeByFormValue: Record<string, string> = {
   round_robin: "round_robin",
@@ -152,4 +152,39 @@ export async function updateProject(formData: FormData) {
   revalidatePath(`/book/${currentSlug}`);
   revalidatePath(`/book/${slug}`);
   redirect(`/admin/projects/${slug}`);
+}
+
+export async function deleteProject(formData: FormData) {
+  await requireAdmin();
+
+  const projectId = getText(formData, "projectId");
+  const currentSlug = getText(formData, "currentSlug");
+
+  if (!projectId || !currentSlug) {
+    throw new Error("Project id is required.");
+  }
+
+  const bookingResult = await query<{ count: string }>(
+    "select count(*)::text as count from bookings where project_id = $1",
+    [projectId],
+  );
+  const bookingCount = Number(bookingResult.rows[0]?.count ?? 0);
+
+  if (bookingCount > 0) {
+    await query(
+      `
+        update projects
+        set is_active = false, updated_at = CURRENT_TIMESTAMP
+        where id = $1
+      `,
+      [projectId],
+    );
+  } else {
+    await query("delete from projects where id = $1", [projectId]);
+  }
+
+  revalidatePath("/admin");
+  revalidatePath(`/admin/projects/${currentSlug}`);
+  revalidatePath(`/book/${currentSlug}`);
+  redirect("/admin");
 }

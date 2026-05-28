@@ -5,6 +5,7 @@ import { getMembers } from "@/lib/admin-members";
 import {
   activateMember,
   approveMember,
+  deleteMember,
   disableMember,
   updateMemberRole,
 } from "./actions";
@@ -89,6 +90,9 @@ export default async function AdminMembersPage() {
                         担当ページ {member.projectCount}
                       </span>
                       <span className="rounded-full bg-slate-100 px-3 py-1">
+                        予約履歴 {member.assignedBookingCount}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1">
                         Google {member.hasGoogleAccount ? "連携済み" : "未連携"}
                       </span>
                     </div>
@@ -153,6 +157,15 @@ export default async function AdminMembersPage() {
                         </button>
                       </form>
                     )}
+                    <form action={deleteMember}>
+                      <input name="userId" type="hidden" value={member.id} />
+                      <button
+                        className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        disabled={member.email === "ryohei0824@gmail.com"}
+                      >
+                        削除
+                      </button>
+                    </form>
                   </div>
                 </article>
               ))}

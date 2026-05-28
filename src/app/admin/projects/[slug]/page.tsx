@@ -4,7 +4,7 @@ import { AppHeader } from "@/components/app-header";
 import { getAdminProjectDetail } from "@/lib/admin-projects";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getProjectHostOptions } from "@/lib/projects";
-import { updateProject } from "./actions";
+import { deleteProject, updateProject } from "./actions";
 
 const weekdays = [
   { value: 1, label: "月" },
@@ -261,6 +261,18 @@ export default async function AdminProjectDetailPage({
             >
               変更を保存
             </button>
+            <section className="rounded-3xl border border-red-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-semibold text-red-700">削除</p>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                予約履歴がないプロジェクトは削除します。予約履歴がある場合は履歴保護のため非公開にします。
+              </p>
+              <button
+                className="mt-4 w-full rounded-xl border border-red-200 px-5 py-3 text-sm font-semibold text-red-700 hover:bg-red-50"
+                formAction={deleteProject}
+              >
+                このプロジェクトを削除
+              </button>
+            </section>
           </aside>
         </form>
       </main>

@@ -10,6 +10,7 @@ export type MemberListItem = {
   role: "admin" | "member";
   status: "invited" | "active" | "disabled";
   projectCount: number;
+  assignedBookingCount: number;
   hasGoogleAccount: boolean;
   createdAt: string;
 };
@@ -37,6 +38,7 @@ type MemberRow = {
   role: "admin" | "member";
   status: "invited" | "active" | "disabled";
   project_count: string;
+  assigned_booking_count: string;
   google_account_count: string;
   created_at: Date;
 };
@@ -71,10 +73,12 @@ export async function getMembers(): Promise<MemberListItem[]> {
       u.role,
       u.status,
       count(distinct ph.project_id)::text as project_count,
+      count(distinct b.id)::text as assigned_booking_count,
       count(distinct ga.id)::text as google_account_count,
       u.created_at
     from users u
     left join project_hosts ph on ph.user_id = u.id and ph.is_active = true
+    left join bookings b on b.host_id = u.id
     left join google_accounts ga on ga.user_id = u.id
     group by u.id
     order by
@@ -95,6 +99,7 @@ export async function getMembers(): Promise<MemberListItem[]> {
     role: member.role,
     status: member.status,
     projectCount: Number(member.project_count),
+    assignedBookingCount: Number(member.assigned_booking_count),
     hasGoogleAccount: Number(member.google_account_count) > 0,
     createdAt: member.created_at.toISOString(),
   }));

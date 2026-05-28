@@ -29,8 +29,6 @@ export async function updateMySettings(formData: FormData) {
 
   const displayName = getText(formData, "displayName");
   const timezone = getText(formData, "timezone") || "Asia/Tokyo";
-  const startMinute = parseTimeToMinute(getText(formData, "availabilityStart"));
-  const endMinute = parseTimeToMinute(getText(formData, "availabilityEnd"));
   const weekdays = [
     ...new Set(
       formData
@@ -44,9 +42,24 @@ export async function updateMySettings(formData: FormData) {
     throw new Error("Display name is required.");
   }
 
-  if (startMinute === null || endMinute === null || startMinute >= endMinute) {
-    throw new Error("Availability time range is invalid.");
+  if (weekdays.length === 0) {
+    throw new Error("At least one availability weekday is required.");
   }
+
+  const availabilities = weekdays.map((weekday) => {
+    const startMinute = parseTimeToMinute(
+      getText(formData, `availabilityStart_${weekday}`),
+    );
+    const endMinute = parseTimeToMinute(
+      getText(formData, `availabilityEnd_${weekday}`),
+    );
+
+    if (startMinute === null || endMinute === null || startMinute >= endMinute) {
+      throw new Error("Availability time range is invalid.");
+    }
+
+    return { weekday, startMinute, endMinute };
+  });
 
   await transaction(async (client) => {
     await client.query(
@@ -62,7 +75,7 @@ export async function updateMySettings(formData: FormData) {
       user.id,
     ]);
 
-    for (const weekday of weekdays) {
+    for (const availability of availabilities) {
       await client.query(
         `
           insert into user_availabilities (
@@ -70,7 +83,13 @@ export async function updateMySettings(formData: FormData) {
           )
           values ($1, $2, $3, $4, $5)
         `,
-        [randomUUID(), user.id, weekday, startMinute, endMinute],
+        [
+          randomUUID(),
+          user.id,
+          availability.weekday,
+          availability.startMinute,
+          availability.endMinute,
+        ],
       );
     }
   });

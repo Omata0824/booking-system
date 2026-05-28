@@ -19,9 +19,11 @@ const weekdays = [
 export default async function AdminSettingsPage() {
   const user = await requireActiveMember();
   const settings = await getMemberSettings(user.id);
-  const availability = settings?.availabilities[0];
   const selectedWeekdays = new Set(
     settings?.availabilities.map((item) => item.weekday) ?? [1, 2, 3, 4, 5],
+  );
+  const availabilityByWeekday = new Map(
+    settings?.availabilities.map((item) => [item.weekday, item]) ?? [],
   );
 
   return (
@@ -74,46 +76,48 @@ export default async function AdminSettingsPage() {
 
             <h2 className="mt-8 text-lg font-semibold">基本の稼働時間</h2>
             <fieldset className="mt-5">
-              <legend className="text-sm font-medium text-slate-700">稼働曜日</legend>
-              <div className="mt-3 flex flex-wrap gap-3 text-sm">
+              <legend className="text-sm font-medium text-slate-700">曜日ごとの稼働時間</legend>
+              <div className="mt-3 grid gap-3">
                 {weekdays.map((weekday) => (
                   <label
                     key={weekday.value}
-                    className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5"
+                    className="grid gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm sm:grid-cols-[80px_1fr_1fr]"
                   >
-                    <input
-                      defaultChecked={selectedWeekdays.has(weekday.value)}
-                      name="availabilityWeekdays"
-                      type="checkbox"
-                      value={weekday.value}
-                    />
-                    {weekday.label}
+                    <span className="flex items-center gap-2 font-medium text-slate-700">
+                      <input
+                        defaultChecked={selectedWeekdays.has(weekday.value)}
+                        name="availabilityWeekdays"
+                        type="checkbox"
+                        value={weekday.value}
+                      />
+                      {weekday.label}
+                    </span>
+                    <span>
+                      <span className="mb-1 block text-xs text-slate-500">開始</span>
+                      <input
+                        className="block w-full rounded-xl border border-slate-300 px-3 py-2 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                        defaultValue={formatMinute(
+                          availabilityByWeekday.get(weekday.value)?.startMinute ?? 10 * 60,
+                        )}
+                        name={`availabilityStart_${weekday.value}`}
+                        type="time"
+                      />
+                    </span>
+                    <span>
+                      <span className="mb-1 block text-xs text-slate-500">終了</span>
+                      <input
+                        className="block w-full rounded-xl border border-slate-300 px-3 py-2 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                        defaultValue={formatMinute(
+                          availabilityByWeekday.get(weekday.value)?.endMinute ?? 20 * 60,
+                        )}
+                        name={`availabilityEnd_${weekday.value}`}
+                        type="time"
+                      />
+                    </span>
                   </label>
                 ))}
               </div>
             </fieldset>
-            <div className="mt-5 grid gap-5 sm:grid-cols-2">
-              <label className="text-sm font-medium text-slate-700">
-                開始
-                <input
-                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                  defaultValue={formatMinute(availability?.startMinute ?? 10 * 60)}
-                  name="availabilityStart"
-                  required
-                  type="time"
-                />
-              </label>
-              <label className="text-sm font-medium text-slate-700">
-                終了
-                <input
-                  className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                  defaultValue={formatMinute(availability?.endMinute ?? 20 * 60)}
-                  name="availabilityEnd"
-                  required
-                  type="time"
-                />
-              </label>
-            </div>
 
             <button
               className="mt-7 rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-teal-700"
