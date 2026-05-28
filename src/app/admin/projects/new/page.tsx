@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import { AssignmentMode } from "@/generated/prisma/enums";
+import { requireAdmin } from "@/lib/admin-auth";
 import { getProjectHostOptions } from "@/lib/projects";
 import { createProject } from "./actions";
 
@@ -17,6 +18,8 @@ const weekdays = [
 export const dynamic = "force-dynamic";
 
 export default async function NewProjectPage() {
+  await requireAdmin();
+
   const hosts = await getProjectHostOptions();
 
   return (

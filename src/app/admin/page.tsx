@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { AdminProjectList } from "@/components/admin-project-list";
 import { AppHeader } from "@/components/app-header";
+import { requireAdmin } from "@/lib/admin-auth";
 import { getProjectList } from "@/lib/projects";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
+  await requireAdmin();
+
   const projects = await getProjectList();
   const activeProjects = projects.filter((project) => project.status.includes("公開")).length;
   const bookingsThisMonth = projects.reduce(

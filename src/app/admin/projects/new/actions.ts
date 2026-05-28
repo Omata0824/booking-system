@@ -4,6 +4,7 @@ import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { transaction } from "@/lib/db";
+import { requireAdmin } from "@/lib/admin-auth";
 
 const assignmentModeByFormValue: Record<string, string> = {
   ROUND_ROBIN: "round_robin",
@@ -44,6 +45,8 @@ function parseTimeToMinute(value: string) {
 }
 
 export async function createProject(formData: FormData) {
+  await requireAdmin();
+
   const name = getText(formData, "name");
   const slug = normalizeSlug(getText(formData, "slug"));
   const hostIds = [
