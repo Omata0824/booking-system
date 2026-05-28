@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
+import { TimeSelectField } from "@/components/time-select-field";
 import { requireActiveMember } from "@/lib/admin-auth";
 import { getMemberSettings } from "@/lib/admin-members";
 
@@ -173,17 +174,11 @@ function Info({ label, value }: { label: string; value: string }) {
 
 function TimeSelect({ name, value }: { name: string; value: string }) {
   return (
-    <select
-      className="block w-full rounded-xl border border-slate-300 px-3 py-2 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-      defaultValue={value}
+    <TimeSelectField
       name={name}
-    >
-      {timeOptions.map((time) => (
-        <option key={time} value={time}>
-          {time}
-        </option>
-      ))}
-    </select>
+      options={timeOptions}
+      value={value}
+    />
   );
 }
 
