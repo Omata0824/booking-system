@@ -46,9 +46,9 @@ export function AdminProjectList({ projects }: AdminProjectListProps) {
             <span className="rounded-xl bg-teal-600 px-4 py-2 text-white">
               日程調整カレンダー
             </span>
-            <span className="rounded-xl border border-slate-200 px-4 py-2 text-slate-500">
+            <Link className="rounded-xl border border-slate-200 px-4 py-2 text-slate-500 hover:bg-slate-50" href="/admin/bookings">
               予定
-            </span>
+            </Link>
           </div>
           <label className="relative block md:w-80">
             <span className="sr-only">日程調整カレンダーを検索</span>

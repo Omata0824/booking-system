@@ -33,7 +33,7 @@ export default async function AdminDashboardPage() {
             <nav className="p-3 text-sm">
               <SideLink href="/admin" label="ホーム" />
               <SideLink active href="/admin" label="日程調整カレンダー" />
-              <SideLink href="/admin" label="予定" />
+              <SideLink href="/admin/bookings" label="予定" />
               <SideLink href="/admin" label="メンバー" />
               <SideLink href="/" label="Google連携" />
             </nav>

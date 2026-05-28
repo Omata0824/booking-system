@@ -1,10 +1,11 @@
 import Link from "next/link";
 
 type AppHeaderProps = {
+  activeNav?: "projects" | "bookings" | "google";
   variant?: "admin" | "public" | "poc";
 };
 
-export function AppHeader({ variant = "admin" }: AppHeaderProps) {
+export function AppHeader({ activeNav = "projects", variant = "admin" }: AppHeaderProps) {
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4">
@@ -21,13 +22,13 @@ export function AppHeader({ variant = "admin" }: AppHeaderProps) {
         </Link>
         {variant !== "public" ? (
           <nav className="order-3 flex w-full items-center gap-1 overflow-x-auto border-t border-slate-100 pt-3 text-sm sm:order-none sm:w-auto sm:border-0 sm:pt-0">
-            <Link className="rounded-lg bg-teal-50 px-3 py-2 font-medium text-teal-700" href="/admin">
+            <Link className={navClass(activeNav === "projects")} href="/admin">
               日程調整カレンダー
             </Link>
-            <Link className="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50" href="/book/web-design">
-              公開ページを見る
+            <Link className={navClass(activeNav === "bookings")} href="/admin/bookings">
+              予約一覧
             </Link>
-            <Link className="rounded-lg px-3 py-2 text-slate-600 hover:bg-slate-50" href="/">
+            <Link className={navClass(activeNav === "google")} href="/">
               Google連携PoC
             </Link>
           </nav>
@@ -39,4 +40,12 @@ export function AppHeader({ variant = "admin" }: AppHeaderProps) {
       </div>
     </header>
   );
+}
+
+function navClass(active: boolean) {
+  return `rounded-lg px-3 py-2 ${
+    active
+      ? "bg-teal-50 font-medium text-teal-700"
+      : "text-slate-600 hover:bg-slate-50"
+  }`;
 }
