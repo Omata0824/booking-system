@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash, randomUUID } from "crypto";
+import { createBookingCalendarEvent } from "@/lib/booking-calendar";
 import { hasDatabaseUrl, query, transaction } from "@/lib/db";
 import { mockProject } from "@/lib/mock-data";
 
@@ -43,6 +44,8 @@ export type BookingResult = {
   endsAt: string;
   hostName: string;
   guestName: string;
+  googleMeetUrl?: string | null;
+  calendarSyncStatus?: string;
 };
 
 type JstDateParts = {
@@ -328,7 +331,7 @@ export async function createBooking(params: {
     throw new Error("日時を正しく選択してください。");
   }
 
-  return await transaction(async (client) => {
+  const booking = await transaction(async (client) => {
     const projectResult = await client.query<ProjectRow>(
       `
         select id, name, slug, description, duration_minutes, booking_window_days,
@@ -453,6 +456,7 @@ export async function createBooking(params: {
 
     return {
       bookingId: booking.id,
+      hostId: host.user_id,
       projectName: project.name,
       startsAt: booking.starts_at.toISOString(),
       endsAt: booking.ends_at.toISOString(),
@@ -460,4 +464,50 @@ export async function createBooking(params: {
       guestName: params.guestName,
     };
   });
+
+  const calendarEvent = await createBookingCalendarEvent({
+    hostId: booking.hostId,
+    projectName: booking.projectName,
+    guestName: params.guestName,
+    guestEmail: params.guestEmail,
+    startsAt: new Date(booking.startsAt),
+    endsAt: new Date(booking.endsAt),
+  });
+
+  if (calendarEvent.status === "created") {
+    await query(
+      `
+        update bookings
+        set
+          google_event_id = $2,
+          google_meet_url = $3,
+          calendar_id = 'primary',
+          calendar_sync_status = 'created',
+          updated_at = CURRENT_TIMESTAMP
+        where id = $1
+      `,
+      [booking.bookingId, calendarEvent.eventId, calendarEvent.meetUrl],
+    );
+  } else if (calendarEvent.status === "error") {
+    await query(
+      `
+        update bookings
+        set calendar_sync_status = 'error', updated_at = CURRENT_TIMESTAMP
+        where id = $1
+      `,
+      [booking.bookingId],
+    );
+  }
+
+  return {
+    bookingId: booking.bookingId,
+    projectName: booking.projectName,
+    startsAt: booking.startsAt,
+    endsAt: booking.endsAt,
+    hostName: booking.hostName,
+    guestName: booking.guestName,
+    googleMeetUrl:
+      calendarEvent.status === "created" ? calendarEvent.meetUrl : null,
+    calendarSyncStatus: calendarEvent.status,
+  };
 }

@@ -292,6 +292,20 @@ function Completion({
             <InfoTerm label="担当者" value={booking.hostName} />
             <InfoTerm label="所要時間" value={`${project.durationMinutes}分`} />
           </dl>
+          {booking.googleMeetUrl ? (
+            <a
+              className="mt-5 block rounded-xl bg-teal-600 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-teal-700"
+              href={booking.googleMeetUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Google Meet を開く
+            </a>
+          ) : (
+            <p className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Meet URL は担当者のGoogle連携後に自動作成されます。
+            </p>
+          )}
         </div>
       </div>
     </section>

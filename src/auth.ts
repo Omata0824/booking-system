@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import { saveGoogleAccount } from "@/lib/google-account-store";
 
 declare module "next-auth" {
   interface Session {
@@ -104,6 +105,22 @@ export const { auth, handlers, signIn, signOut } = NextAuth(async () => {
       }),
     ],
     callbacks: {
+      async signIn({ account, profile, user }) {
+        if (account?.provider === "google") {
+          await saveGoogleAccount({
+            email: user.email ?? profile?.email,
+            name: user.name ?? profile?.name,
+            image: user.image,
+            providerAccountId: account.providerAccountId,
+            accessToken: account.access_token,
+            refreshToken: account.refresh_token,
+            expiresAt: account.expires_at,
+            scopes: account.scope,
+          });
+        }
+
+        return true;
+      },
       async jwt({ token, account }) {
         if (account) {
           return {

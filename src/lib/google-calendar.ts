@@ -18,6 +18,15 @@ export class GoogleCalendarError extends Error {
   }
 }
 
+export type MeetEventInput = {
+  summary: string;
+  description: string;
+  start: string;
+  end: string;
+  guestEmail?: string;
+  guestName?: string;
+};
+
 async function calendarRequest<T>(
   accessToken: string,
   url: string,
@@ -66,6 +75,18 @@ export function createMeetEvent(
   start: string,
   end: string,
 ) {
+  return createMeetEventForBooking(accessToken, {
+    summary: "予約システム PoC 面談",
+    description: "Google Calendar / Google Meet 連携検証で作成された予定です。",
+    start,
+    end,
+  });
+}
+
+export function createMeetEventForBooking(
+  accessToken: string,
+  input: MeetEventInput,
+) {
   const url = new URL(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
   );
@@ -82,10 +103,13 @@ export function createMeetEvent(
   }>(accessToken, url.toString(), {
     method: "POST",
     body: JSON.stringify({
-      summary: "予約システム PoC 面談",
-      description: "Google Calendar / Google Meet 連携検証で作成された予定です。",
-      start: { dateTime: start, timeZone: "Asia/Tokyo" },
-      end: { dateTime: end, timeZone: "Asia/Tokyo" },
+      summary: input.summary,
+      description: input.description,
+      start: { dateTime: input.start, timeZone: "Asia/Tokyo" },
+      end: { dateTime: input.end, timeZone: "Asia/Tokyo" },
+      attendees: input.guestEmail
+        ? [{ email: input.guestEmail, displayName: input.guestName }]
+        : undefined,
       conferenceData: {
         createRequest: {
           requestId: crypto.randomUUID(),
