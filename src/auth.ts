@@ -59,6 +59,7 @@ async function refreshAccessToken(token: {
 }
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
+  trustHost: true,
   providers: [
     Google({
       authorization: {
