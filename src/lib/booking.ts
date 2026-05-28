@@ -1,7 +1,10 @@
 import "server-only";
 
 import { createHash, randomUUID } from "crypto";
-import { createBookingCalendarEvent } from "@/lib/booking-calendar";
+import {
+  createBookingCalendarEvent,
+  getHostCalendarBusyPeriods,
+} from "@/lib/booking-calendar";
 import { hasDatabaseUrl, query, transaction } from "@/lib/db";
 import { mockProject } from "@/lib/mock-data";
 
@@ -252,6 +255,11 @@ export async function getBookingPageProject(
     [project.id, blockingStatuses, rangeEnd, now],
   );
   const bookings = bookingsResult.rows;
+  const googleBusyByHost = await getHostCalendarBusyPeriods(
+    hosts.map((host) => host.user_id),
+    now,
+    rangeEnd,
+  );
 
   const days = Array.from({ length: daysToGenerate }, (_, index) => {
     const parts = addDays(today, index);
@@ -275,10 +283,14 @@ export async function getBookingPageProject(
         }
 
         const availableHostCount = hosts.filter(
-          (host) =>
-            !bookings.some(
+          (host) => {
+            const googleBusy = googleBusyByHost.get(host.user_id) ?? [];
+            return (
+              !bookings.some(
               (booking) => booking.host_id === host.user_id && overlaps(start, end, booking),
-            ),
+              ) && !googleBusy.some((busy) => overlaps(start, end, busy))
+            );
+          },
         ).length;
 
         if (availableHostCount === 0) {
@@ -376,9 +388,20 @@ export async function createBooking(params: {
       `,
       [project.id, blockingStatuses, end, start],
     );
+    const googleBusyByHost = await getHostCalendarBusyPeriods(
+      hosts.map((candidate) => candidate.user_id),
+      start,
+      end,
+    );
     const host = hosts.find(
-      (candidate) =>
-        !conflictResult.rows.some((booking) => booking.host_id === candidate.user_id),
+      (candidate) => {
+        const googleBusy = googleBusyByHost.get(candidate.user_id) ?? [];
+        return (
+          !conflictResult.rows.some(
+            (booking) => booking.host_id === candidate.user_id,
+          ) && !googleBusy.some((busy) => overlaps(start, end, busy))
+        );
+      },
     );
 
     if (!host) {

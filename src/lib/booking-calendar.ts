@@ -3,6 +3,7 @@ import "server-only";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import {
   createMeetEventForBooking,
+  fetchFreeBusy,
   GoogleCalendarError,
 } from "@/lib/google-calendar";
 import {
@@ -23,6 +24,11 @@ export type BookingCalendarEventResult =
       calendarUrl: string | null;
     }
   | { status: "not_connected" | "error"; error?: string };
+
+export type HostCalendarBusyPeriod = {
+  starts_at: Date;
+  ends_at: Date;
+};
 
 async function getAuthEnv(): Promise<AuthEnv> {
   if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
@@ -66,6 +72,80 @@ async function refreshAccessToken(refreshToken: string) {
   };
 }
 
+async function getActiveAccessToken(userId: string) {
+  const tokens = await getGoogleAccountTokensForUser(userId);
+
+  if (!tokens?.refreshToken) {
+    return null;
+  }
+
+  const shouldRefresh =
+    !tokens.accessToken ||
+    !tokens.expiresAt ||
+    tokens.expiresAt.getTime() <= Date.now() + 60 * 1000;
+  const activeTokens = shouldRefresh
+    ? await refreshAccessToken(tokens.refreshToken)
+    : {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt,
+      };
+
+  if (!activeTokens.accessToken) {
+    return null;
+  }
+
+  if (shouldRefresh) {
+    await updateGoogleAccountTokens({
+      userId,
+      accessToken: activeTokens.accessToken,
+      refreshToken: activeTokens.refreshToken,
+      expiresAt: activeTokens.expiresAt ?? new Date(Date.now() + 3600 * 1000),
+    });
+  }
+
+  return activeTokens.accessToken;
+}
+
+export async function getHostCalendarBusyPeriods(
+  hostIds: string[],
+  timeMin: Date,
+  timeMax: Date,
+) {
+  const busyByHost = new Map<string, HostCalendarBusyPeriod[]>();
+
+  await Promise.all(
+    hostIds.map(async (hostId) => {
+      try {
+        const accessToken = await getActiveAccessToken(hostId);
+        if (!accessToken) {
+          busyByHost.set(hostId, []);
+          return;
+        }
+
+        const freeBusy = await fetchFreeBusy(
+          accessToken,
+          timeMin.toISOString(),
+          timeMax.toISOString(),
+        );
+        const busy = freeBusy.calendars.primary?.busy ?? [];
+        busyByHost.set(
+          hostId,
+          busy.map((period) => ({
+            starts_at: new Date(period.start),
+            ends_at: new Date(period.end),
+          })),
+        );
+      } catch (error) {
+        console.error("Google Calendar freebusy failed.", error);
+        busyByHost.set(hostId, []);
+      }
+    }),
+  );
+
+  return busyByHost;
+}
+
 export async function createBookingCalendarEvent(params: {
   hostId: string;
   projectName: string;
@@ -74,39 +154,13 @@ export async function createBookingCalendarEvent(params: {
   startsAt: Date;
   endsAt: Date;
 }): Promise<BookingCalendarEventResult> {
-  const tokens = await getGoogleAccountTokensForUser(params.hostId);
-
-  if (!tokens?.refreshToken) {
-    return { status: "not_connected" };
-  }
-
   try {
-    const shouldRefresh =
-      !tokens.accessToken ||
-      !tokens.expiresAt ||
-      tokens.expiresAt.getTime() <= Date.now() + 60 * 1000;
-    const activeTokens = shouldRefresh
-      ? await refreshAccessToken(tokens.refreshToken)
-      : {
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          expiresAt: tokens.expiresAt,
-        };
-
-    if (!activeTokens.accessToken) {
+    const accessToken = await getActiveAccessToken(params.hostId);
+    if (!accessToken) {
       return { status: "not_connected" };
     }
 
-    if (shouldRefresh) {
-      await updateGoogleAccountTokens({
-        userId: params.hostId,
-        accessToken: activeTokens.accessToken,
-        refreshToken: activeTokens.refreshToken,
-        expiresAt: activeTokens.expiresAt ?? new Date(Date.now() + 3600 * 1000),
-      });
-    }
-
-    const event = await createMeetEventForBooking(activeTokens.accessToken, {
+    const event = await createMeetEventForBooking(accessToken, {
       summary: `${params.projectName} - ${params.guestName}様`,
       description: [
         "予約システムから自動作成された予定です。",
