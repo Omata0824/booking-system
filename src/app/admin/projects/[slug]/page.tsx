@@ -7,7 +7,6 @@ import { TimeSelectField } from "@/components/time-select-field";
 import { getAdminProjectDetail } from "@/lib/admin-projects";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getProjectHostOptions } from "@/lib/projects";
-import { updateProject } from "./actions";
 
 const weekdays = [
   { value: 1, label: "月" },
@@ -90,7 +89,7 @@ export default async function AdminProjectDetailPage({
           </p>
         )}
 
-        <form action={updateProject} className="grid gap-6 lg:grid-cols-[1fr_340px]">
+        <form action="/admin/projects/update" className="grid gap-6 lg:grid-cols-[1fr_340px]" method="post">
           <input name="projectId" type="hidden" value={project.id} />
           <input name="currentSlug" type="hidden" value={project.slug} />
 
