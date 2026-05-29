@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { TimeSelectField } from "@/components/time-select-field";
 import { getAdminProjectDetail } from "@/lib/admin-projects";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getProjectHostOptions } from "@/lib/projects";
@@ -40,6 +42,13 @@ export default async function AdminProjectDetailPage({
   if (!project) {
     notFound();
   }
+
+  const availabilityByWeekday = new Map(
+    project.availabilities.map((availability) => [
+      availability.weekday,
+      availability,
+    ]),
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -194,6 +203,9 @@ export default async function AdminProjectDetailPage({
                       <option value="0">なし</option>
                       <option value="10">前後10分</option>
                       <option value="15">前後15分</option>
+                      <option value="30">前後30分</option>
+                      <option value="60">前後60分</option>
+                      <option value="90">前後90分</option>
                     </select>
                   </label>
                 </div>
@@ -202,46 +214,41 @@ export default async function AdminProjectDetailPage({
 
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <SectionHeader title="受付時間" description="公開ページに表示する曜日と時間帯です。" />
-              <fieldset className="mt-6">
-                <legend className="text-sm font-medium text-slate-700">受付曜日</legend>
-                <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                  {weekdays.map((weekday) => (
+              <div className="mt-6 grid gap-3">
+                {weekdays.map((weekday) => {
+                  const availability = availabilityByWeekday.get(weekday.value);
+
+                  return (
                     <label
                       key={weekday.value}
-                      className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5"
+                      className="grid gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm sm:grid-cols-[80px_1fr_1fr]"
                     >
-                      <input
-                        defaultChecked={project.availabilityWeekdays.includes(weekday.value)}
-                        name="availabilityWeekdays"
-                        type="checkbox"
-                        value={weekday.value}
-                      />
-                      {weekday.label}
+                      <span className="flex items-center gap-2 font-medium text-slate-700">
+                        <input
+                          defaultChecked={project.availabilityWeekdays.includes(weekday.value)}
+                          name="availabilityWeekdays"
+                          type="checkbox"
+                          value={weekday.value}
+                        />
+                        {weekday.label}
+                      </span>
+                      <span>
+                        <span className="mb-1 block text-xs text-slate-500">受付開始</span>
+                        <TimeSelect
+                          name={`availabilityStart_${weekday.value}`}
+                          value={availability?.start ?? project.availabilityStart}
+                        />
+                      </span>
+                      <span>
+                        <span className="mb-1 block text-xs text-slate-500">受付終了</span>
+                        <TimeSelect
+                          name={`availabilityEnd_${weekday.value}`}
+                          value={availability?.end ?? project.availabilityEnd}
+                        />
+                      </span>
                     </label>
-                  ))}
-                </div>
-              </fieldset>
-              <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <label className="text-sm font-medium text-slate-700">
-                  受付開始
-                  <input
-                    className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                    defaultValue={project.availabilityStart}
-                    name="availabilityStart"
-                    required
-                    type="time"
-                  />
-                </label>
-                <label className="text-sm font-medium text-slate-700">
-                  受付終了
-                  <input
-                    className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                    defaultValue={project.availabilityEnd}
-                    name="availabilityEnd"
-                    required
-                    type="time"
-                  />
-                </label>
+                  );
+                })}
               </div>
             </section>
           </div>
@@ -266,13 +273,14 @@ export default async function AdminProjectDetailPage({
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 予約履歴がないプロジェクトは削除します。予約履歴がある場合は履歴保護のため非公開にします。
               </p>
-              <button
+              <ConfirmSubmitButton
                 className="mt-4 w-full rounded-xl border border-red-200 px-5 py-3 text-sm font-semibold text-red-700 hover:bg-red-50"
+                confirmMessage="このプロジェクトを削除しますか？予約履歴がある場合は非公開になります。"
                 formAction="/admin/projects/delete"
                 formMethod="post"
               >
                 このプロジェクトを削除
-              </button>
+              </ConfirmSubmitButton>
             </section>
           </aside>
         </form>
@@ -304,3 +312,17 @@ function InfoTerm({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+function TimeSelect({ name, value }: { name: string; value: string }) {
+  return <TimeSelectField name={name} options={timeOptions} value={value} />;
+}
+
+function formatMinute(minute: number) {
+  const hour = Math.floor(minute / 60);
+  const minutes = minute % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+const timeOptions = Array.from({ length: 48 }, (_, index) =>
+  formatMinute(index * 30),
+);

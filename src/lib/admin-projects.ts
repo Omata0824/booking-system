@@ -16,6 +16,11 @@ export type AdminProjectDetail = {
   availabilityWeekdays: number[];
   availabilityStart: string;
   availabilityEnd: string;
+  availabilities: Array<{
+    weekday: number;
+    start: string;
+    end: string;
+  }>;
   bookingsCount: number;
 };
 
@@ -121,6 +126,11 @@ export async function getAdminProjectDetail(
     availabilityEnd: firstAvailability
       ? formatMinute(firstAvailability.end_minute)
       : "20:00",
+    availabilities: availabilityResult.rows.map((item) => ({
+      weekday: item.weekday,
+      start: formatMinute(item.start_minute),
+      end: formatMinute(item.end_minute),
+    })),
     bookingsCount: Number(project.bookings_count),
   };
 }

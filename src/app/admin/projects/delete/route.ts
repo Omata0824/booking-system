@@ -39,6 +39,12 @@ export async function POST(request: NextRequest) {
     return redirectTo(request, "/admin");
   }
 
+  const projectResult = await query<{ slug: string }>(
+    "select slug from projects where id = $1 limit 1",
+    [projectId],
+  );
+  const slug = projectResult.rows[0]?.slug;
+
   const bookingResult = await query<{ count: string }>(
     "select count(*)::text as count from bookings where project_id = $1",
     [projectId],
@@ -60,6 +66,10 @@ export async function POST(request: NextRequest) {
 
   revalidatePath("/admin");
   revalidatePath("/admin/projects/new");
+  if (slug) {
+    revalidatePath(`/admin/projects/${slug}`);
+    revalidatePath(`/book/${slug}`);
+  }
 
   return redirectTo(request, "/admin");
 }

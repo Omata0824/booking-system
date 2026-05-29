@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { ProjectActionMenu } from "@/components/project-action-menu";
 import type { ProjectListItem } from "@/lib/projects";
 
 type AdminProjectListProps = {
@@ -98,12 +99,7 @@ export function AdminProjectList({ projects }: AdminProjectListProps) {
                     ))}
                   </div>
                 </div>
-                <button
-                  className="self-start rounded-xl border border-slate-200 px-3 py-2 text-xl leading-none text-slate-500 hover:bg-slate-50"
-                  type="button"
-                >
-                  ⋮
-                </button>
+                <ProjectActionMenu projectId={project.id} slug={project.slug} />
               </div>
               <div className="flex flex-col gap-2 border-t border-slate-100 bg-slate-50 px-5 py-4 text-sm font-semibold text-teal-700 sm:flex-row sm:justify-end">
                 <Link

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
+import { TimeSelectField } from "@/components/time-select-field";
 import { AssignmentMode } from "@/generated/prisma/enums";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getProjectHostOptions } from "@/lib/projects";
@@ -169,6 +170,9 @@ export default async function NewProjectPage() {
                       <option value="0">なし</option>
                       <option value="10">前後10分</option>
                       <option value="15">前後15分</option>
+                      <option value="30">前後30分</option>
+                      <option value="60">前後60分</option>
+                      <option value="90">前後90分</option>
                     </select>
                   </label>
                 </div>
@@ -181,14 +185,13 @@ export default async function NewProjectPage() {
                 title="受付時間"
                 description="公開ページのカレンダーに表示する曜日と時間帯です。"
               />
-              <fieldset className="mt-6">
-                <legend className="text-sm font-medium text-slate-700">受付曜日</legend>
-                <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                  {weekdays.map((weekday) => (
-                    <label
-                      key={weekday.value}
-                      className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5"
-                    >
+              <div className="mt-6 grid gap-3">
+                {weekdays.map((weekday) => (
+                  <label
+                    key={weekday.value}
+                    className="grid gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm sm:grid-cols-[80px_1fr_1fr]"
+                  >
+                    <span className="flex items-center gap-2 font-medium text-slate-700">
                       <input
                         defaultChecked={weekday.value >= 1 && weekday.value <= 5}
                         name="availabilityWeekdays"
@@ -196,31 +199,23 @@ export default async function NewProjectPage() {
                         value={weekday.value}
                       />
                       {weekday.label}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <div className="mt-5 grid gap-5 sm:grid-cols-2">
-                <label className="text-sm font-medium text-slate-700">
-                  受付開始
-                  <input
-                    className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                    defaultValue="10:00"
-                    name="availabilityStart"
-                    required
-                    type="time"
-                  />
-                </label>
-                <label className="text-sm font-medium text-slate-700">
-                  受付終了
-                  <input
-                    className="mt-2 block w-full rounded-xl border border-slate-300 px-3 py-2.5 font-normal outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                    defaultValue="20:00"
-                    name="availabilityEnd"
-                    required
-                    type="time"
-                  />
-                </label>
+                    </span>
+                    <span>
+                      <span className="mb-1 block text-xs text-slate-500">受付開始</span>
+                      <TimeSelect
+                        name={`availabilityStart_${weekday.value}`}
+                        value="10:00"
+                      />
+                    </span>
+                    <span>
+                      <span className="mb-1 block text-xs text-slate-500">受付終了</span>
+                      <TimeSelect
+                        name={`availabilityEnd_${weekday.value}`}
+                        value={weekday.value === 6 ? "17:00" : "20:00"}
+                      />
+                    </span>
+                  </label>
+                ))}
               </div>
             </section>
           </div>
@@ -294,3 +289,17 @@ function SectionHeader({
     </div>
   );
 }
+
+function TimeSelect({ name, value }: { name: string; value: string }) {
+  return <TimeSelectField name={name} options={timeOptions} value={value} />;
+}
+
+function formatMinute(minute: number) {
+  const hour = Math.floor(minute / 60);
+  const minutes = minute % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+const timeOptions = Array.from({ length: 48 }, (_, index) =>
+  formatMinute(index * 30),
+);

@@ -47,6 +47,23 @@ function parseTimeToMinute(value: string) {
   return hours * 60 + minutes;
 }
 
+function parseAvailabilities(formData: FormData, weekdays: number[]) {
+  return weekdays.map((weekday) => {
+    const startMinute = parseTimeToMinute(
+      getText(formData, `availabilityStart_${weekday}`),
+    );
+    const endMinute = parseTimeToMinute(
+      getText(formData, `availabilityEnd_${weekday}`),
+    );
+
+    if (startMinute === null || endMinute === null || startMinute >= endMinute) {
+      return null;
+    }
+
+    return { weekday, startMinute, endMinute };
+  });
+}
+
 export async function updateProject(formData: FormData) {
   await requireAdmin();
 
@@ -65,8 +82,7 @@ export async function updateProject(formData: FormData) {
         .filter((value) => Number.isInteger(value) && value >= 0 && value <= 6),
     ),
   ];
-  const startMinute = parseTimeToMinute(getText(formData, "availabilityStart"));
-  const endMinute = parseTimeToMinute(getText(formData, "availabilityEnd"));
+  const availabilities = parseAvailabilities(formData, weekdayValues);
 
   if (!projectId || !currentSlug || !name || !slug || hostIds.length === 0) {
     throw new Error("Project id, name, slug, and hosts are required.");
@@ -76,7 +92,7 @@ export async function updateProject(formData: FormData) {
     throw new Error("At least one availability weekday is required.");
   }
 
-  if (startMinute === null || endMinute === null || startMinute >= endMinute) {
+  if (availabilities.some((availability) => availability === null)) {
     throw new Error("Availability time range is invalid.");
   }
 
@@ -134,7 +150,11 @@ export async function updateProject(formData: FormData) {
       "delete from project_availabilities where project_id = $1",
       [projectId],
     );
-    for (const weekday of weekdayValues) {
+    for (const availability of availabilities) {
+      if (!availability) {
+        continue;
+      }
+
       await client.query(
         `
           insert into project_availabilities (
@@ -142,7 +162,13 @@ export async function updateProject(formData: FormData) {
           )
           values ($1, $2, $3, $4, $5)
         `,
-        [randomUUID(), projectId, weekday, startMinute, endMinute],
+        [
+          randomUUID(),
+          projectId,
+          availability.weekday,
+          availability.startMinute,
+          availability.endMinute,
+        ],
       );
     }
   });

@@ -2,6 +2,7 @@ import { hasDatabaseUrl, query } from "@/lib/db";
 import { mockProject, mockProjects } from "@/lib/mock-data";
 
 export type ProjectListItem = {
+  id?: string;
   name: string;
   slug: string;
   durationMinutes: number;
@@ -75,6 +76,7 @@ export async function getProjectList(): Promise<ProjectListItem[]> {
     `);
 
     return projectsResult.rows.map((project) => ({
+      id: project.id,
       name: project.name,
       slug: project.slug,
       durationMinutes: project.duration_minutes,
