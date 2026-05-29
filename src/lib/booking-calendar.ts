@@ -3,6 +3,7 @@ import "server-only";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import {
   createMeetEventForBooking,
+  deleteCalendarEvent,
   fetchFreeBusy,
   GoogleCalendarError,
 } from "@/lib/google-calendar";
@@ -23,6 +24,10 @@ export type BookingCalendarEventResult =
       meetUrl: string | null;
       calendarUrl: string | null;
     }
+  | { status: "not_connected" | "error"; error?: string };
+
+export type BookingCalendarDeleteResult =
+  | { status: "deleted" }
   | { status: "not_connected" | "error"; error?: string };
 
 export type HostCalendarBusyPeriod = {
@@ -187,6 +192,30 @@ export async function createBookingCalendarEvent(params: {
     }
 
     console.error("Google Calendar event creation failed.", error);
+    return { status: "error" };
+  }
+}
+
+export async function deleteBookingCalendarEvent(params: {
+  hostId: string;
+  calendarId: string;
+  eventId: string;
+}): Promise<BookingCalendarDeleteResult> {
+  try {
+    const accessToken = await getActiveAccessToken(params.hostId);
+    if (!accessToken) {
+      return { status: "not_connected" };
+    }
+
+    await deleteCalendarEvent(accessToken, params.calendarId, params.eventId);
+    return { status: "deleted" };
+  } catch (error) {
+    if (error instanceof GoogleCalendarError) {
+      console.error("Google Calendar event deletion failed.", error.message);
+      return { status: "error", error: error.message };
+    }
+
+    console.error("Google Calendar event deletion failed.", error);
     return { status: "error" };
   }
 }

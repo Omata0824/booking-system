@@ -50,6 +50,27 @@ async function calendarRequest<T>(
   return (await response.json()) as T;
 }
 
+async function calendarEmptyRequest(
+  accessToken: string,
+  url: string,
+  init: RequestInit,
+) {
+  const response = await fetch(url, {
+    ...init,
+    cache: "no-store",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      ...init.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new GoogleCalendarError(detail || response.statusText, response.status);
+  }
+}
+
 export function fetchFreeBusy(
   accessToken: string,
   timeMin: string,
@@ -117,5 +138,20 @@ export function createMeetEventForBooking(
         },
       },
     }),
+  });
+}
+
+export function deleteCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+) {
+  const url = new URL(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+  );
+  url.searchParams.set("sendUpdates", "none");
+
+  return calendarEmptyRequest(accessToken, url.toString(), {
+    method: "DELETE",
   });
 }
