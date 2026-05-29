@@ -1,11 +1,16 @@
 import { randomUUID } from "crypto";
+import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { transaction } from "@/lib/db";
 
 function redirectTo(request: NextRequest, path: string) {
-  return NextResponse.redirect(new URL(path, request.url), 303);
+  const response = NextResponse.redirect(new URL(path, request.url), 303);
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  response.headers.set("Pragma", "no-cache");
+  response.headers.set("Expires", "0");
+  return response;
 }
 
 function getText(formData: FormData, key: string) {
@@ -116,5 +121,8 @@ export async function POST(request: NextRequest) {
     }
   });
 
-  return redirectTo(request, "/admin/settings?saved=1");
+  revalidatePath("/admin/settings");
+  revalidatePath("/admin/members");
+
+  return redirectTo(request, `/admin/settings?saved=1&t=${Date.now()}`);
 }
