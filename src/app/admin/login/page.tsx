@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { signInToAdmin } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +24,12 @@ export default function AdminLoginPage() {
           <p className="mt-3 text-sm leading-6 text-slate-600">
             管理画面の閲覧と予約ページ作成にはログインが必要です。
           </p>
-          <form className="mt-6" action={signInToAdmin}>
-            <button className="w-full rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-teal-700">
-              Google でログイン
-            </button>
-          </form>
+          <a
+            className="mt-6 block w-full rounded-xl bg-teal-600 px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-teal-700"
+            href="/admin/login/google"
+          >
+            Google でログイン
+          </a>
         </section>
       </main>
     </div>
