@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createBooking, type BookingResult } from "@/lib/booking";
 
 export type BookingActionState =
@@ -9,6 +10,18 @@ export type BookingActionState =
 
 function getText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
+}
+
+async function getRequestBaseUrl() {
+  const headerList = await headers();
+  const host = headerList.get("x-forwarded-host") ?? headerList.get("host");
+
+  if (!host) {
+    return undefined;
+  }
+
+  const protocol = headerList.get("x-forwarded-proto") ?? "https";
+  return `${protocol}://${host}`;
 }
 
 export async function submitBooking(
@@ -35,6 +48,7 @@ export async function submitBooking(
       guestEmail,
       company: getText(formData, "company"),
       comment: getText(formData, "comment"),
+      baseUrl: await getRequestBaseUrl(),
     });
 
     return { status: "success", booking };

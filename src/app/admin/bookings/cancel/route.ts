@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 import { getAdminSession, getCurrentAdminUser } from "@/lib/admin-auth";
 import { deleteBookingCalendarEvent } from "@/lib/booking-calendar";
+import { sendBookingCancelledEmails } from "@/lib/booking-email";
 import { query, transaction } from "@/lib/db";
 
 function redirectTo(request: NextRequest, path = "/admin/bookings") {
@@ -17,6 +18,14 @@ function redirectTo(request: NextRequest, path = "/admin/bookings") {
 
 function getText(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
+}
+
+function revealStoredValue(value: string | null) {
+  if (!value) {
+    return "";
+  }
+
+  return value.startsWith("plain:") ? value.slice("plain:".length) : value;
 }
 
 async function ensureAdmin(request: NextRequest) {
@@ -55,15 +64,38 @@ export async function POST(request: NextRequest) {
     const bookingResult = await client.query<{
       id: string;
       host_id: string;
+      host_name: string;
+      host_email: string | null;
+      project_name: string;
+      project_slug: string;
+      guest_name_encrypted: string;
+      guest_email_encrypted: string;
+      starts_at: Date;
+      ends_at: Date;
       status: string;
       calendar_id: string | null;
       google_event_id: string | null;
     }>(
       `
-        select id, host_id, status, calendar_id, google_event_id
-        from bookings
-        where id = $1
-        for update
+        select
+          b.id,
+          b.host_id,
+          u.display_name as host_name,
+          u.email as host_email,
+          p.name as project_name,
+          p.slug as project_slug,
+          b.guest_name_encrypted,
+          b.guest_email_encrypted,
+          b.starts_at,
+          b.ends_at,
+          b.status,
+          b.calendar_id,
+          b.google_event_id
+        from bookings b
+        join projects p on p.id = b.project_id
+        join users u on u.id = b.host_id
+        where b.id = $1
+        for update of b
       `,
       [bookingId],
     );
@@ -129,6 +161,20 @@ export async function POST(request: NextRequest) {
         [booking.id],
       );
     }
+  }
+
+  if (booking) {
+    await sendBookingCancelledEmails({
+      cancelledBy: "host",
+      projectName: booking.project_name,
+      projectSlug: booking.project_slug,
+      startsAt: booking.starts_at.toISOString(),
+      endsAt: booking.ends_at.toISOString(),
+      hostName: booking.host_name,
+      hostEmail: booking.host_email,
+      guestName: revealStoredValue(booking.guest_name_encrypted),
+      guestEmail: revealStoredValue(booking.guest_email_encrypted),
+    });
   }
 
   revalidatePath("/admin/bookings");

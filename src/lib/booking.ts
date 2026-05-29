@@ -50,6 +50,7 @@ export type BookingResult = {
   guestName: string;
   googleMeetUrl?: string | null;
   calendarSyncStatus?: string;
+  managementUrl?: string | null;
 };
 
 type JstDateParts = {
@@ -386,6 +387,7 @@ export async function createBooking(params: {
   guestEmail: string;
   company?: string;
   comment?: string;
+  baseUrl?: string;
 }): Promise<BookingResult> {
   const start = new Date(params.startIso);
 
@@ -485,6 +487,10 @@ export async function createBooking(params: {
       throw new Error("選択した時間は埋まりました。別の時間を選択してください。");
     }
 
+    const managementToken = randomUUID();
+    const managementUrl = params.baseUrl
+      ? new URL(`/manage/${managementToken}`, params.baseUrl).toString()
+      : null;
     const bookingResult = await client.query<{
       id: string;
       starts_at: Date;
@@ -517,7 +523,7 @@ export async function createBooking(params: {
         `plain:${params.guestName}`,
         `plain:${params.guestEmail}`,
         createHash("sha256").update(params.guestEmail.toLowerCase()).digest("hex"),
-        createHash("sha256").update(randomUUID()).digest("hex"),
+        createHash("sha256").update(managementToken).digest("hex"),
         randomUUID(),
       ],
     );
@@ -563,6 +569,7 @@ export async function createBooking(params: {
       endsAt: booking.ends_at.toISOString(),
       hostName: host.display_name,
       guestName: params.guestName,
+      managementUrl,
     };
   });
 
@@ -610,6 +617,7 @@ export async function createBooking(params: {
     guestEmail: params.guestEmail,
     googleMeetUrl:
       calendarEvent.status === "created" ? calendarEvent.meetUrl : null,
+    managementUrl: booking.managementUrl,
   });
 
   return {
@@ -622,5 +630,6 @@ export async function createBooking(params: {
     googleMeetUrl:
       calendarEvent.status === "created" ? calendarEvent.meetUrl : null,
     calendarSyncStatus: calendarEvent.status,
+    managementUrl: booking.managementUrl,
   };
 }

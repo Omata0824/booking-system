@@ -16,6 +16,19 @@ type BookingEmailParams = {
   guestName: string;
   guestEmail: string;
   googleMeetUrl?: string | null;
+  managementUrl?: string | null;
+};
+
+type BookingCancelledEmailParams = {
+  cancelledBy: "host" | "participant";
+  projectName: string;
+  projectSlug: string;
+  startsAt: string;
+  endsAt: string;
+  hostName: string;
+  hostEmail?: string | null;
+  guestName: string;
+  guestEmail: string;
 };
 
 type CloudflareContextWithBrevo = {
@@ -129,10 +142,16 @@ export async function sendBookingCreatedEmails(params: BookingEmailParams) {
   const dateTime = formatDateTimeRange(params.startsAt, params.endsAt);
   const meetText = params.googleMeetUrl
     ? `Google Meet: ${params.googleMeetUrl}`
-    : "Google Meet URLは担当者側の連携状況により未発行です。";
+    : "Google Meet URLは担当者の連携状況により未発行です。";
   const meetHtml = params.googleMeetUrl
     ? `<p><a href="${escapeHtml(params.googleMeetUrl)}">Google Meetを開く</a></p>`
-    : "<p>Google Meet URLは担当者側の連携状況により未発行です。</p>";
+    : "<p>Google Meet URLは担当者の連携状況により未発行です。</p>";
+  const managementText = params.managementUrl
+    ? `予約の確認・キャンセル: ${params.managementUrl}`
+    : "";
+  const managementHtml = params.managementUrl
+    ? `<p><a href="${escapeHtml(params.managementUrl)}">予約の確認・キャンセル</a></p>`
+    : "";
 
   const guestSubject = `【${params.projectName}】予約を受け付けました`;
   const guestText = `${params.guestName}様
@@ -142,6 +161,7 @@ export async function sendBookingCreatedEmails(params: BookingEmailParams) {
 日時: ${dateTime}
 担当者: ${params.hostName}
 ${meetText}
+${managementText}
 
 当日は時間になりましたら上記URLからご参加ください。`;
   const guestHtml = `<p>${escapeHtml(params.guestName)}様</p>
@@ -151,6 +171,7 @@ ${meetText}
   <li>担当者: ${escapeHtml(params.hostName)}</li>
 </ul>
 ${meetHtml}
+${managementHtml}
 <p>当日は時間になりましたら上記URLからご参加ください。</p>`;
 
   const adminRecipients = uniqueRecipients([
@@ -175,6 +196,82 @@ ${meetText}`;
   <li>メール: ${escapeHtml(params.guestEmail)}</li>
 </ul>
 ${meetHtml}`;
+
+  const tasks = [
+    sendBrevoEmail({
+      to: [{ email: params.guestEmail, name: params.guestName }],
+      subject: guestSubject,
+      textContent: guestText,
+      htmlContent: guestHtml,
+    }),
+  ];
+
+  if (adminRecipients.length > 0) {
+    tasks.push(
+      sendBrevoEmail({
+        to: adminRecipients,
+        subject: adminSubject,
+        textContent: adminText,
+        htmlContent: adminHtml,
+      }),
+    );
+  }
+
+  const results = await Promise.allSettled(tasks);
+  for (const result of results) {
+    if (result.status === "rejected") {
+      console.error(result.reason);
+    }
+  }
+}
+
+export async function sendBookingCancelledEmails(params: BookingCancelledEmailParams) {
+  const dateTime = formatDateTimeRange(params.startsAt, params.endsAt);
+  const cancelledByText = params.cancelledBy === "host" ? "主催者" : "参加者";
+
+  const guestSubject = `【${params.projectName}】予約キャンセルのお知らせ`;
+  const guestText = `${params.guestName}様
+
+以下の予約はキャンセルされました。
+
+予約ページ: ${params.projectName}
+日時: ${dateTime}
+担当者: ${params.hostName}
+キャンセル操作: ${cancelledByText}
+
+必要に応じて、予約ページから再度ご予約ください。`;
+  const guestHtml = `<p>${escapeHtml(params.guestName)}様</p>
+<p>以下の予約はキャンセルされました。</p>
+<ul>
+  <li>予約ページ: ${escapeHtml(params.projectName)}</li>
+  <li>日時: ${escapeHtml(dateTime)}</li>
+  <li>担当者: ${escapeHtml(params.hostName)}</li>
+  <li>キャンセル操作: ${escapeHtml(cancelledByText)}</li>
+</ul>
+<p>必要に応じて、予約ページから再度ご予約ください。</p>`;
+
+  const adminRecipients = uniqueRecipients([
+    ...(params.hostEmail ? [{ email: params.hostEmail, name: params.hostName }] : []),
+    ...splitEmails(getEnvValue("ADMIN_EMAILS")).map((email) => ({ email })),
+  ]);
+  const adminSubject = `【予約キャンセル】${params.projectName}`;
+  const adminText = `予約がキャンセルされました。
+
+予約ページ: ${params.projectName}
+日時: ${dateTime}
+担当者: ${params.hostName}
+参加者: ${params.guestName}
+メール: ${params.guestEmail}
+キャンセル操作: ${cancelledByText}`;
+  const adminHtml = `<p>予約がキャンセルされました。</p>
+<ul>
+  <li>予約ページ: ${escapeHtml(params.projectName)}</li>
+  <li>日時: ${escapeHtml(dateTime)}</li>
+  <li>担当者: ${escapeHtml(params.hostName)}</li>
+  <li>参加者: ${escapeHtml(params.guestName)}</li>
+  <li>メール: ${escapeHtml(params.guestEmail)}</li>
+  <li>キャンセル操作: ${escapeHtml(cancelledByText)}</li>
+</ul>`;
 
   const tasks = [
     sendBrevoEmail({
