@@ -5,6 +5,7 @@ import {
   createBookingCalendarEvent,
   getHostCalendarBusyPeriods,
 } from "@/lib/booking-calendar";
+import { sendBookingCreatedEmails } from "@/lib/booking-email";
 import { hasDatabaseUrl, query, transaction } from "@/lib/db";
 import { mockProject } from "@/lib/mock-data";
 
@@ -84,6 +85,7 @@ type UserAvailabilityRow = AvailabilityRow & {
 type HostRow = {
   user_id: string;
   display_name: string;
+  email: string;
 };
 
 type BusyRow = {
@@ -238,7 +240,7 @@ export async function getBookingPageProject(
 
   const hostsResult = await query<HostRow>(
     `
-      select ph.user_id, u.display_name
+      select ph.user_id, u.display_name, u.email
       from project_hosts ph
       join users u on u.id = ph.user_id
       where ph.project_id = $1 and ph.is_active = true
@@ -395,7 +397,7 @@ export async function createBooking(params: {
 
     const hostsResult = await client.query<HostRow>(
       `
-        select ph.user_id, u.display_name
+        select ph.user_id, u.display_name, u.email
         from project_hosts ph
         join users u on u.id = ph.user_id
         where ph.project_id = $1 and ph.is_active = true
@@ -534,6 +536,7 @@ export async function createBooking(params: {
     return {
       bookingId: booking.id,
       hostId: host.user_id,
+      hostEmail: host.email,
       projectName: project.name,
       startsAt: booking.starts_at.toISOString(),
       endsAt: booking.ends_at.toISOString(),
@@ -575,6 +578,18 @@ export async function createBooking(params: {
       [booking.bookingId],
     );
   }
+
+  await sendBookingCreatedEmails({
+    projectName: booking.projectName,
+    startsAt: booking.startsAt,
+    endsAt: booking.endsAt,
+    hostName: booking.hostName,
+    hostEmail: booking.hostEmail,
+    guestName: booking.guestName,
+    guestEmail: params.guestEmail,
+    googleMeetUrl:
+      calendarEvent.status === "created" ? calendarEvent.meetUrl : null,
+  });
 
   return {
     bookingId: booking.bookingId,
