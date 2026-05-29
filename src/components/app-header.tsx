@@ -1,11 +1,16 @@
 import Link from "next/link";
+import { getCurrentAdminUser } from "@/lib/admin-auth";
 
 type AppHeaderProps = {
   activeNav?: "projects" | "bookings" | "members" | "settings" | "google";
   variant?: "admin" | "public" | "poc";
 };
 
-export function AppHeader({ activeNav = "projects", variant = "admin" }: AppHeaderProps) {
+export async function AppHeader({ activeNav = "projects", variant = "admin" }: AppHeaderProps) {
+  const user = variant === "public" ? await getCurrentAdminUser() : null;
+  const canOpenAdmin = user?.status === "active";
+  const adminHref = user?.role === "admin" ? "/admin" : "/admin/settings";
+
   return (
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4">
@@ -43,11 +48,11 @@ export function AppHeader({ activeNav = "projects", variant = "admin" }: AppHead
               Google連携PoC
             </Link>
           </nav>
-        ) : (
-          <Link className="text-sm text-slate-500 hover:text-slate-800" href="/admin">
+        ) : canOpenAdmin ? (
+          <Link className="text-sm text-slate-500 hover:text-slate-800" href={adminHref}>
             管理画面
           </Link>
-        )}
+        ) : null}
       </div>
     </header>
   );
