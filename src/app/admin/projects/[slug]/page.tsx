@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
+import { SubmitStateButton } from "@/components/submit-state-button";
 import { TimeSelectField } from "@/components/time-select-field";
 import { getAdminProjectDetail } from "@/lib/admin-projects";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -28,12 +29,15 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminProjectDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ saved?: string }>;
 }) {
   await requireAdmin();
 
   const { slug } = await params;
+  const { saved } = await searchParams;
   const [project, hosts] = await Promise.all([
     getAdminProjectDetail(slug),
     getProjectHostOptions(),
@@ -79,6 +83,12 @@ export default async function AdminProjectDetailPage({
             </Link>
           </div>
         </div>
+
+        {saved === "1" && (
+          <p className="mb-6 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-semibold text-teal-700">
+            変更を保存しました。
+          </p>
+        )}
 
         <form action={updateProject} className="grid gap-6 lg:grid-cols-[1fr_340px]">
           <input name="projectId" type="hidden" value={project.id} />
@@ -262,12 +272,12 @@ export default async function AdminProjectDetailPage({
                 <InfoTerm label="公開URL" value={`/book/${project.slug}`} />
               </dl>
             </section>
-            <button
-              className="w-full rounded-xl bg-teal-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-teal-700"
-              type="submit"
+            <SubmitStateButton
+              className="w-full rounded-xl bg-teal-600 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-teal-700 disabled:cursor-wait disabled:bg-teal-400"
+              pendingText="保存中..."
             >
               変更を保存
-            </button>
+            </SubmitStateButton>
             <section className="rounded-3xl border border-red-200 bg-white p-5 shadow-sm">
               <p className="text-sm font-semibold text-red-700">削除</p>
               <p className="mt-2 text-sm leading-6 text-slate-500">

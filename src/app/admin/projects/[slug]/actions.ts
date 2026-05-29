@@ -177,7 +177,7 @@ export async function updateProject(formData: FormData) {
   revalidatePath(`/admin/projects/${currentSlug}`);
   revalidatePath(`/book/${currentSlug}`);
   revalidatePath(`/book/${slug}`);
-  redirect(`/admin/projects/${slug}`);
+  redirect(`/admin/projects/${slug}?saved=1&t=${Date.now()}`);
 }
 
 export async function deleteProject(formData: FormData) {
