@@ -90,8 +90,8 @@ type HostRow = {
 
 type BusyRow = {
   host_id: string;
-  starts_at: Date;
-  ends_at: Date;
+  blocked_starts_at: Date;
+  blocked_ends_at: Date;
 };
 
 type FormFieldRow = {
@@ -146,6 +146,14 @@ function formatMinute(minute: number) {
 
 function overlaps(start: Date, end: Date, busy: { starts_at: Date; ends_at: Date }) {
   return busy.starts_at < end && busy.ends_at > start;
+}
+
+function overlapsBlockedTime(
+  start: Date,
+  end: Date,
+  busy: { blocked_starts_at: Date; blocked_ends_at: Date },
+) {
+  return busy.blocked_starts_at < end && busy.blocked_ends_at > start;
 }
 
 function isWithinUserAvailability(
@@ -281,12 +289,12 @@ export async function getBookingPageProject(
   const rangeEnd = createDateFromJst(addDays(today, daysToGenerate + 1), 0);
   const bookingsResult = await query<BusyRow>(
     `
-      select host_id, starts_at, ends_at
+      select host_id, blocked_starts_at, blocked_ends_at
       from bookings
       where project_id = $1
         and status = any($2::booking_status[])
-        and starts_at < $3
-        and ends_at > $4
+        and blocked_starts_at < $3
+        and blocked_ends_at > $4
     `,
     [project.id, blockingStatuses, rangeEnd, now],
   );
@@ -313,6 +321,12 @@ export async function getBookingPageProject(
       ) {
         const start = createDateFromJst(parts, minute);
         const end = createDateFromJst(parts, minute + project.duration_minutes);
+        const blockedStart = new Date(
+          start.getTime() - project.buffer_before_minutes * 60 * 1000,
+        );
+        const blockedEnd = new Date(
+          end.getTime() + project.buffer_after_minutes * 60 * 1000,
+        );
 
         entries.push({
           startIso: start.toISOString(),
@@ -333,7 +347,8 @@ export async function getBookingPageProject(
                     ) &&
                     !bookings.some(
                       (booking) =>
-                        booking.host_id === host.user_id && overlaps(start, end, booking),
+                        booking.host_id === host.user_id &&
+                        overlapsBlockedTime(blockedStart, blockedEnd, booking),
                     ) && !googleBusy.some((busy) => overlaps(start, end, busy))
                   );
                 }).length,
@@ -412,6 +427,12 @@ export async function createBooking(params: {
     }
 
     const end = new Date(start.getTime() + project.duration_minutes * 60 * 1000);
+    const blockedStart = new Date(
+      start.getTime() - project.buffer_before_minutes * 60 * 1000,
+    );
+    const blockedEnd = new Date(
+      end.getTime() + project.buffer_after_minutes * 60 * 1000,
+    );
     const startParts = getJstDateParts(start);
     const weekday = getWeekday(startParts);
     const startMinute =
@@ -424,10 +445,10 @@ export async function createBooking(params: {
         from bookings
         where project_id = $1
           and status = any($2::booking_status[])
-          and starts_at < $3
-          and ends_at > $4
+          and blocked_starts_at < $3
+          and blocked_ends_at > $4
       `,
-      [project.id, blockingStatuses, end, start],
+      [project.id, blockingStatuses, blockedEnd, blockedStart],
     );
     const userAvailabilityResult = await client.query<UserAvailabilityRow>(
       `
@@ -490,8 +511,8 @@ export async function createBooking(params: {
         host.user_id,
         start,
         end,
-        new Date(start.getTime() - project.buffer_before_minutes * 60 * 1000),
-        new Date(end.getTime() + project.buffer_after_minutes * 60 * 1000),
+        blockedStart,
+        blockedEnd,
         timezone,
         `plain:${params.guestName}`,
         `plain:${params.guestEmail}`,
